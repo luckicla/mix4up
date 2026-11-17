@@ -1,0 +1,364 @@
+# Mix4Up: con cada cambio en main se compila todo (el motor, la app de PC con
+# instalador y portable, y el APK), se PRUEBA de verdad (Linux + Chrome, un
+# Windows limpio y el emulador de Android) y solo si todo pasa se publica en
+# las releases fijas mix4up-pc-latest y mix4up-android-latest (de ahí se
+# actualizan solas las apps) y como versión oficial v1.x.y.
+# La versión sale del número de ejecución: PC y móvil llevan siempre la misma.
+name: Mix4Up (compilar, probar y publicar)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mix4up-build
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      v: ${{ steps.v.outputs.v }}
+      n: ${{ steps.v.outputs.n }}
+    steps:
+      - id: v
+        run: |
+          K=$(( ${{ github.run_number }} - 1 ))
+          echo "v=1.$(( K / 100 )).$(( K % 100 ))" >> "$GITHUB_OUTPUT"
+          echo "n=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+  core:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Revisar el código
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+          go vet ./...
+          GOOS=windows go vet ./...
+          for f in web/js/*.js desktop/*.js; do node --check "$f"; done
+      - name: Herramientas para el icono del exe
+        run: |
+          if ! ls /usr/lib/llvm-*/bin/llvm-rc >/dev/null 2>&1 && ! command -v llvm-rc >/dev/null; then
+            for i in 1 2 3; do sudo apt-get update -qq || true; sudo apt-get install -y -qq --fix-missing llvm && break; sleep 20; done
+          fi
+          ls -d /usr/lib/llvm-*/bin | sort -V | tail -1 >> "$GITHUB_PATH"
+      - name: Compilar
+        run: |
+          VERSION="${{ needs.version.outputs.v }}.${{ needs.version.outputs.n }}" ./build.sh
+          test -f rsrc_windows_amd64.syso
+          rm rsrc_windows_amd64.syso
+          go build -trimpath -ldflags "-s -w -X main.version=${{ needs.version.outputs.v }}.${{ needs.version.outputs.n }}" -o mix4up-linux .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core
+          path: |
+            mix4up-core.exe
+            mix4up-linux
+
+  prueba-web:
+    needs: core
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: core
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Herramientas
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          pip install -q playwright yt-dlp
+          sh tools/prueba/videos.sh "$HOME/Videos"
+      - name: Probar (Linux + Chrome, YouTube de verdad)
+        run: |
+          chmod +x mix4up-linux
+          MIX4UP_VIDEOS="$HOME/Videos" python tools/prueba/web.py ./mix4up-linux "$HOME/Videos" out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prueba-web
+          path: out/
+
+  desktop:
+    needs: [version, core]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: core
+          path: core
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Compilar (la nueva y una vieja para probar que se actualiza)
+        working-directory: desktop
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          mkdir -p bin && cp ../core/mix4up-core.exe bin/mix4up-core.exe
+          npm install --no-audit --no-fund
+          npm version "0.9.0" --no-git-tag-version --allow-same-version
+          npx electron-builder --win nsis portable --publish never
+          mkdir -p ../vieja && cp dist/Mix4Up-Instalador.exe dist/Mix4Up-Portable.exe ../vieja/
+          rm -rf dist
+          npm version "${{ needs.version.outputs.v }}" --no-git-tag-version --allow-same-version
+          npx electron-builder --win nsis portable --publish never
+          ls dist
+          echo "${{ needs.version.outputs.v }} $(sha256sum dist/Mix4Up-Instalador.exe | cut -d' ' -f1) $(sha256sum dist/Mix4Up-Portable.exe | cut -d' ' -f1)" > dist/desktop.txt
+          mkdir -p ../nueva && cp dist/Mix4Up-Instalador.exe dist/Mix4Up-Instalador.exe.blockmap dist/Mix4Up-Portable.exe dist/latest.yml dist/desktop.txt ../nueva/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: nueva/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-vieja
+          path: vieja/
+
+  prueba-pc:
+    needs: [version, desktop]
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        caso: [instalada, portable]
+    env:
+      MIX4UP_UPDATES: http://127.0.0.1:8765/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop
+          path: nueva
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-vieja
+          path: vieja
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Herramientas, vídeos de prueba y servidor de actualizaciones
+        shell: bash
+        run: |
+          pip install -q playwright
+          choco install ffmpeg -y --no-progress >/dev/null || true
+          export PATH="$PATH:/c/ProgramData/chocolatey/bin"
+          sh tools/prueba/videos.sh "$USERPROFILE/Videos"
+          mkdir -p /c/usb && cp -r "$USERPROFILE/Videos/." /c/usb/
+          (cd nueva && nohup python -m http.server 8765 > ../srv.log 2>&1 &)
+          sleep 2; curl -s http://127.0.0.1:8765/desktop.txt
+      - name: Instalada — instalar la vieja, actualizarse sola, y probar la nueva
+        if: matrix.caso == 'instalada'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $app = $null
+          for ($t = 1; $t -le 3 -and -not $app; $t++) {
+            $p = Start-Process vieja\Mix4Up-Instalador.exe -ArgumentList '/S' -Wait -PassThru
+            "instalador (intento $t): $($p.ExitCode)"
+            $app = @("$env:LOCALAPPDATA\Programs\Mix4Up\Mix4Up.exe", "$env:LOCALAPPDATA\Programs\mix4up\Mix4Up.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $app) { Write-Error 'no se instaló'; exit 1 }
+          "instalada en $app"
+          Start-Process $app -ArgumentList '--remote-debugging-port=9222'
+          python tools/prueba/pc.py update 9222 "${{ needs.version.outputs.v }}" out
+          if ($LASTEXITCODE) { exit 1 }
+          Start-Sleep 5
+          Get-Process -Name Mix4Up, mix4up-core -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep 3
+          $v = (Get-Item $app).VersionInfo.ProductVersion
+          "Mix4Up.exe instalado ahora: $v"
+          Start-Process $app -ArgumentList '--remote-debugging-port=9222'
+          python tools/prueba/pc.py todo 9222 out
+          if ($LASTEXITCODE) { exit 1 }
+      - name: Portable — actualizarse sola (el .exe del USB queda cambiado por el nuevo)
+        if: matrix.caso == 'portable'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          Copy-Item vieja\Mix4Up-Portable.exe C:\usb\Mix4Up-Portable.exe
+          Start-Process C:\usb\Mix4Up-Portable.exe -ArgumentList '--remote-debugging-port=9222' -WorkingDirectory C:\usb
+          python tools/prueba/pc.py update 9222 "${{ needs.version.outputs.v }}" out
+          if ($LASTEXITCODE) { exit 1 }
+          Start-Sleep 8
+          $v = (Get-Item C:\usb\Mix4Up-Portable.exe).VersionInfo.ProductVersion
+          "Mix4Up-Portable.exe ahora: $v"
+          Get-ChildItem C:\usb | Format-Table Name, Length
+          if (-not "${{ needs.version.outputs.v }}".StartsWith($v)) { Write-Error "la portable sigue siendo $v"; exit 1 }
+          if (-not (Test-Path C:\usb\.mix4up)) { Write-Error 'los datos de la portable no están junto al exe'; exit 1 }
+      - name: Registros
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          foreach ($d in @("$env:APPDATA\Mix4Up", "$env:APPDATA\mix4up", "C:\usb\.mix4up")) {
+            if (Test-Path $d) { Get-ChildItem $d -Recurse -Include *.log -ErrorAction SilentlyContinue | ForEach-Object { "==== $($_.FullName)"; Get-Content $_ -Tail 60 } }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prueba-pc-${{ matrix.caso }}
+          path: out/
+
+  apk:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Compilar (el APK de verdad y dos de prueba para el emulador)
+        working-directory: android
+        run: |
+          gradle assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk ../Mix4Up.apk
+          echo "${{ github.run_number }} $(sha256sum ../Mix4Up.apk | cut -d' ' -f1) ${{ needs.version.outputs.v }}" > ../version.txt
+          mkdir -p ../prueba
+          GITHUB_RUN_NUMBER=1 gradle assembleDebug -Pemu --no-daemon -q
+          cp app/build/outputs/apk/debug/app-debug.apk ../prueba/vieja.apk
+          GITHUB_RUN_NUMBER=$(( ${{ github.run_number }} + 100000 )) gradle assembleDebug -Pemu --no-daemon -q
+          cp app/build/outputs/apk/debug/app-debug.apk ../prueba/Mix4Up.apk
+          echo "$(( ${{ github.run_number }} + 100000 )) $(sha256sum ../prueba/Mix4Up.apk | cut -d' ' -f1) prueba" > ../prueba/version.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: |
+            Mix4Up.apk
+            version.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-prueba
+          path: prueba/
+
+  prueba-android:
+    needs: [version, apk]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk-prueba
+          path: prueba
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Herramientas y vídeos de prueba
+        run: |
+          pip install -q websocket-client
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          sh tools/prueba/videos.sh vids
+          ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=480x270:rate=24 -f lavfi -i sine=frequency=500 -t 300 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -b:v 300k "vids/Largo de prueba.mp4"
+          (cd prueba && nohup python3 -m http.server 8765 > ../srv.log 2>&1 &)
+      - name: Probar en el emulador
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          ram-size: 4096M
+          disk-size: 6000M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -noaudio
+          script: |
+            adb root || true
+            sleep 3
+            adb install -r -i com.luckicla.mix4up prueba/vieja.apk
+            adb shell pm grant com.luckicla.mix4up android.permission.READ_MEDIA_VIDEO
+            adb shell pm grant com.luckicla.mix4up android.permission.POST_NOTIFICATIONS || true
+            adb shell appops set com.luckicla.mix4up REQUEST_INSTALL_PACKAGES allow || true
+            adb shell mkdir -p /sdcard/Movies/Prueba
+            adb push vids/. /sdcard/Movies/Prueba/
+            adb shell content call --uri content://media --method scan_volume --arg external_primary || true
+            sleep 5
+            python3 tools/prueba/android.py "$(cut -d' ' -f1 prueba/version.txt)" out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prueba-android
+          path: out/
+
+  publicar:
+    needs: [version, core, desktop, apk, prueba-web, prueba-pc, prueba-android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop
+          path: pc
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: movil
+      - name: PC (de aquí se actualizan solas la instalada y la portable)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mix4up-pc-latest
+          name: Mix4Up para PC (última)
+          prerelease: true
+          make_latest: false
+          body: Última versión de Mix4Up para Windows. Se actualiza sola; si la quieres a mano, Mix4Up-Instalador.exe o Mix4Up-Portable.exe.
+          files: |
+            pc/Mix4Up-Instalador.exe
+            pc/Mix4Up-Instalador.exe.blockmap
+            pc/Mix4Up-Portable.exe
+            pc/latest.yml
+            pc/desktop.txt
+      - name: Android (de aquí se actualiza sola la app del móvil)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mix4up-android-latest
+          name: Mix4Up para Android (última)
+          prerelease: true
+          make_latest: false
+          body: Última versión de Mix4Up para Android. Descarga Mix4Up.apk e instálala; luego se actualiza sola.
+          files: |
+            movil/Mix4Up.apk
+            movil/version.txt
+      - name: Versión oficial
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.v }}
+          target_commitish: ${{ github.sha }}
+          name: Mix4Up v${{ needs.version.outputs.v }}
+          make_latest: true
+          files: |
+            pc/Mix4Up-Instalador.exe
+            pc/Mix4Up-Portable.exe
+            movil/Mix4Up.apk
+          body: |
+            ## Mix4Up v${{ needs.version.outputs.v }}
+
+            Tus vídeos y YouTube **sin Shorts y sin anuncios**, con tus recomendaciones, para Windows y Android.
+
+            - **Windows**: `Mix4Up-Instalador.exe` (se instala y se actualiza sola) o `Mix4Up-Portable.exe` (sin instalar, los datos van junto al .exe).
+            - **Android**: `Mix4Up.apk`. Se actualiza sola.
+
+            Ha pasado las pruebas automáticas en Linux, en un Windows limpio y en el emulador de Android antes de publicarse.
+
+            Windows o Android pueden avisar de que no es seguro porque no está firmado con un certificado de pago ni viene de una tienda: *Más información → Ejecutar de todas formas* / *Instalar de todas formas*. El código es abierto y estos archivos los compila GitHub a partir de él.

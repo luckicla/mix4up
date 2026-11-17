@@ -1,0 +1,74 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.luckicla.mix4up'
+    compileSdk 34
+
+    defaultConfig {
+        // otro applicationId que MixUp (com.zentor.player): las dos instaladas a la vez
+        applicationId 'com.luckicla.mix4up'
+        minSdk 24
+        targetSdk 34
+        versionCode Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '1')
+        // 1.<m>.<n>: el mismo número que la versión del PC (la misma compilación)
+        versionName mix4upVersionName()
+        // yt-dlp trae su propio Python: solo para los procesadores de móviles
+        // (con -Pemu, también el del emulador de las pruebas automáticas)
+        ndk { abiFilters(*(['arm64-v8a', 'armeabi-v7a'] + (project.hasProperty('emu') ? ['x86_64'] : []))) }
+    }
+
+    packaging {
+        jniLibs { useLegacyPackaging true }
+    }
+
+    // Una clave fija para que cada versión se instale encima de la anterior.
+    signingConfigs {
+        dev {
+            storeFile file('mix4up-dev.keystore')
+            storePassword 'mix4updev'
+            keyAlias 'mix4up'
+            keyPassword 'mix4updev'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.dev
+        }
+        debug {
+            signingConfig signingConfigs.dev
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // la interfaz es la misma que la del PC
+    sourceSets {
+        main {
+            assets.srcDirs += "$buildDir/generated/webassets"
+        }
+    }
+}
+
+tasks.register('copyWeb', Copy) {
+    from "$rootDir/../web"
+    into "$buildDir/generated/webassets/web"
+}
+preBuild.dependsOn copyWeb
+
+dependencies {
+    // yt-dlp (y ffmpeg para juntar imagen y sonido al descargar)
+    implementation 'io.github.junkfood02.youtubedl-android:library:0.18.1'
+    implementation 'io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1'
+}
+
+def mix4upVersionName() {
+    int k = Math.max(0, Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '1') - 1)
+    return "1.${k.intdiv(100)}.${k % 100}"
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La interfaz habla con el servidor de Mix4Up en el propio móvil y (si lo
+     conectas) con Mix4Up en el PC por la WiFi de casa: http normal. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

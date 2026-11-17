@@ -1,0 +1,13 @@
+/Mix4Up.exe
+/mix4up
+/mix4up-core*
+/dist/
+*.syso
+*.res
+.gradle/
+build/
+!desktop/build/
+local.properties
+node_modules/
+/out/
+__pycache__/

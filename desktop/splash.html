@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>Mix4Up</title>
+<style>
+html,body{-webkit-app-region:drag;margin:0;height:100%;background:#0f0f13;color:#f1efe9;font-family:system-ui,"Segoe UI",sans-serif;display:grid;place-items:center;overflow:hidden}
+.box{display:grid;justify-items:center;gap:16px}
+.logo{width:120px;height:120px;animation:in .5s cubic-bezier(.2,.8,.2,1)}
+b{font:800 30px system-ui,"Segoe UI",sans-serif;letter-spacing:-.5px}b i{font-style:normal;color:#ff2e88}
+.bar{width:140px;height:4px;border-radius:2px;background:#22222b;overflow:hidden}.bar i{display:block;height:100%;width:40%;background:#ff2e88;animation:go 1.1s ease-in-out infinite}
+@keyframes go{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+@keyframes in{from{opacity:0;transform:translateY(14px) scale(.9)}}
+.e{display:none;color:#ff6b9d;max-width:330px;text-align:center;line-height:1.5}.err .e{display:block}.err .bar{display:none}
+</style></head>
+<body><button id="x" title="Cerrar" onclick="try{Mix4UpShell.win('close')}catch(e){window.close()}" style="position:fixed;top:0;right:0;width:46px;height:36px;border:0;background:none;color:#a5a3ad;font-size:16px;cursor:pointer;-webkit-app-region:no-drag">✕</button><div class="box">
+<svg class="logo" viewBox="0 0 100 100"><defs><clipPath id="c"><rect x="34" y="35" width="52" height="38" rx="9" transform="rotate(7 60 54)"/></clipPath></defs><rect width="100" height="100" rx="22.5" fill="#0a0a0d"/><rect x="13" y="26" width="52" height="38" rx="9" fill="#c8ff00" transform="rotate(-8 39 45)"/><rect x="34" y="35" width="52" height="38" rx="9" fill="#ff2e88" transform="rotate(7 60 54)"/><rect x="13" y="26" width="52" height="38" rx="9" fill="#0a0a0d" transform="rotate(-8 39 45)" clip-path="url(#c)"/><path d="M45 41.5 61 50.5 45 59.5z" fill="#ece6d6" stroke="#ece6d6" stroke-width="3" stroke-linejoin="round"/></svg>
+<b>Mix<i>4</i>Up</b>
+<div class="bar"><i></i></div>
+<div class="e">No se pudo arrancar Mix4Up. Ciérralo y ábrelo otra vez; si sigue pasando, reinstálalo.</div>
+</div></body></html>
