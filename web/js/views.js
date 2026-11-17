@@ -120,6 +120,9 @@ const Views = (() => {
   function infinite(box, f, opts = {}) {
     const g = opts.rows ? h('div.row-list') : h('div.grid');
     const sentinel = h('div.loadmore', null, h('div.spin'));
+    // (mientras llega la primera tanda: tarjetas grises con la forma de los vídeos)
+    const sk = opts.skel ? skeleton(opts.skel) : null;
+    if (sk) box.append(sk);
     box.append(g, sentinel);
     let busy = false, count = 0, dead = false;
     async function more() {
@@ -140,6 +143,7 @@ const Views = (() => {
         sentinel.replaceChildren(errorBox(e, () => { sentinel.replaceChildren(h('div.spin')); more(); }, count ? 'No se pudieron cargar más' : 'No se pudo cargar'));
       } finally {
         busy = false;
+        if (sk && sk.isConnected) sk.remove();
         // si aún se ve el final, otra tanda
         if (g.isConnected && !f.done && sentinel.querySelector('.spin')) {
           const r = sentinel.getBoundingClientRect();
@@ -272,19 +276,69 @@ const Views = (() => {
   route(/^\/$/, async ({ alive }) => {
     const acct = await YT.account();
     YT.warm();
-    loadLocal().catch(() => {});
-    const box = setView('');
+    const localP = loadLocal().catch(() => {});
+    const box = setView('home');
     const connected = YT.connected();
-    const chipsRow = h('div.chips', { hidden: true });
-    box.append(chipsRow);
+    const mob = innerWidth <= 760;
+
+    // un saludo (con tu nombre si has conectado la cuenta)
+    const hr = new Date().getHours();
+    const greet = hr < 6 ? 'Buenas noches' : hr < 14 ? 'Buenos días' : hr < 21 ? 'Buenas tardes' : 'Buenas noches';
+    const me = connected ? YT.meCached() : null;
+    const first = n => String(n || '').trim().split(/\s+/)[0];
+    const hiName = h('span', null, me && me.name ? ', ' + first(me.name) : '');
+    if (connected && !me) YT.me().then(m => { if (m && m.name && hiName.isConnected) hiName.textContent = ', ' + first(m.name); }).catch(() => {});
+    const today = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+    box.append(h('div.hello', null, h('small', null, today), h('h1', null, greet, hiName)));
+
     if (!connected) {
       box.append(h('div.banner', null, icon('user'), h('p', null, h('b', null, 'Conecta tu cuenta de YouTube'), h('br'), h('span.muted', null, 'Y aquí verás lo mismo que te recomienda YouTube, sin un solo Short. Mientras tanto, te enseño cosas parecidas a lo que ves.')),
         h('button.btn.acc', { onclick: () => SettingsPage.connect() }, 'Conectar')));
     }
+
+    // accesos rápidos (en el PC ya están en el menú de la izquierda)
+    if (mob) {
+      const quick = h('div.quick');
+      const paintQuick = () => {
+        const n = x => x ? h('small', null, x) : '';
+        const tile = (href, ic, label, count) => h('a', { href }, h('i', null, icon(ic)), h('span', null, label), n(count));
+        quick.replaceChildren(
+          tile('#/later', 'later', 'Ver más tarde', Journal.all('wl').length),
+          tile('#/history', 'history', 'Historial', Journal.all('hist').length),
+          tile('#/local', 'folder', 'Mis vídeos', (local.videos || []).length),
+          tile('#/lists', 'list', 'Listas', Journal.lists().length),
+          tile('#/downloads', 'download', 'Descargas'),
+          tile('#/likes', 'like', 'Me gusta', Journal.all('like').length));
+      };
+      paintQuick();
+      localP.then(() => { if (quick.isConnected) paintQuick(); });
+      box.append(quick);
+    }
+
+    // tus canales, en una fila de caritas (como YouTube)
+    if (mob && connected) {
+      const subs = h('div.subrow.homesubs', { hidden: true });
+      box.append(subs);
+      YT.guideSubs().then(list => {
+        if (!list || !list.length || !subs.isConnected) return;
+        subs.replaceChildren(...list.slice(0, 20).map(c => h('a', { href: '#/channel/' + c.id }, c.thumb ? h('img', { src: c.thumb, alt: '', loading: 'lazy' }) : h('span.ph0', null, icon('user')), h('span', null, c.title))),
+          h('a.all', { href: '#/subs' }, h('span.ph0', null, icon('subs')), h('span', null, 'Todas')));
+        subs.hidden = false;
+      }).catch(() => {});
+    }
+
+    // seguir viendo: en el móvil, una fila que se desliza (no una miniatura que ocupa toda la pantalla)
     const cont = continueItems();
-    if (cont.length) box.append(h('section.shelf', null, h('h2', null, icon('history'), 'Seguir viendo'), grid(cont)));
+    if (cont.length) {
+      const sh = (title, ic, body, more) => h('section.shelf', null, h('div.shelfhead', null, h('h2', null, icon(ic), title), more || ''), body);
+      box.append(sh('Seguir viendo', 'history', mob ? h('div.hscroll', null, cont.map(it => card(it))) : grid(cont), h('a.more2', { href: '#/history' }, 'Ver todo')));
+    }
+
+    // las recomendaciones, con sus temas encima (se quedan pegados arriba al bajar)
+    const chipsRow = h('div.chips', { hidden: true });
+    const forYou = h('div.shelfhead.foryou', null, h('h2', null, icon('home'), connected ? 'Para ti' : 'Te puede gustar'));
     const feedBox = h('div');
-    box.append(feedBox);
+    box.append(forYou, chipsRow, feedBox);
     const empty = () => h('div.notice', null, icon('search', 'big'), h('h2', null, connected ? 'YouTube no ha dado recomendaciones' : 'Empieza buscando algo'),
       h('p', null, connected ? 'Prueba a refrescar. Si sigue igual, vuelve a conectar tu cuenta en Ajustes.' : 'Busca un vídeo arriba o conecta tu cuenta: según lo que veas, aquí aparecerán recomendaciones.'),
       h('div.btns', null, h('button.btn.acc', { onclick: () => M4.render() }, icon('refresh'), 'Reintentar'), !connected ? h('button.btn', { onclick: () => SettingsPage.connect() }, 'Conectar con YouTube') : ''));
@@ -292,7 +346,7 @@ const Views = (() => {
     const start = f => {
       if (cur) cur.stop();
       feedBox.replaceChildren();
-      cur = infinite(feedBox, f, { empty, onFirst: () => paintChips(f) });
+      cur = infinite(feedBox, f, { empty, skel: mob ? 3 : 8, onFirst: () => paintChips(f) });
     };
     const home = takeHome() || YT.home();
     let chipsDone = false;
@@ -303,11 +357,13 @@ const Views = (() => {
       chipsDone = true;
       chipsRow.hidden = false;
       const all = h('button.chip.on', null, 'Todo');
-      const set = b => chipsRow.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b));
-      all.onclick = () => { set(all); start(YT.home()); };
+      const set = b => { chipsRow.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b)); b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); };
+      // al cambiar de tema: a donde empiezan las recomendaciones (no arriba del todo)
+      const toFeed = () => { const m = $('#main'), y = chipsRow.offsetTop - 2; if (m.scrollTop > y) m.scrollTop = y; };
+      all.onclick = () => { set(all); toFeed(); start(YT.home()); };
       chipsRow.replaceChildren(all, ...list.filter(c => !/^todo|^all$/i.test(c.label)).map(c => {
         const b = h('button.chip', null, c.label);
-        b.onclick = () => { M4.haptic('tick'); set(b); $('#main').scrollTop = 0; start(YT.chipFeed(c.token)); };
+        b.onclick = () => { M4.haptic('tick'); set(b); toFeed(); start(YT.chipFeed(c.token)); };
         return b;
       }));
     }

@@ -29,6 +29,13 @@ const App = (() => {
     const on = $('#tabs a.on');
     if (!on || !$('#tabs').offsetWidth) { tabInd.style.opacity = '0'; return; }
     const x = on.offsetLeft + on.offsetWidth / 2;
+    // la pastilla, centrada justo detrás del icono (con cualquier estilo de barra: flotante, mini, clásica…)
+    const ic = on.querySelector('svg, img');
+    if (ic) {
+      const tb = $('#tabs'), r = ic.getBoundingClientRect(), t = tb.getBoundingClientRect();
+      const mid = r.top - t.top - tb.clientTop + r.height / 2;
+      tabInd.style.top = Math.round(mid - tabInd.offsetHeight / 2) + 'px';
+    }
     tabInd.style.opacity = '1';
     tabInd.style.transform = `translateX(${x}px) translateX(-50%)`;
     // de una pestaña a otra: la pastilla se estira hacia donde va y luego se recoge (como una gota)
@@ -45,6 +52,8 @@ const App = (() => {
   }
   let tabFirst = true;
   addEventListener('resize', () => moveTabInd(true));
+  // al cambiar el estilo de la barra en Ajustes, la pastilla se recoloca
+  M4.on('settings', p => { if ('navStyle' in p) setTimeout(() => moveTabInd(true), 60); });
   M4.on('route', r => {
     setTimeout(() => { moveTabInd(tabFirst); tabFirst = false; }, 0);
     toggleSide(false);
@@ -57,6 +66,10 @@ const App = (() => {
       showMini();
     }
     document.body.classList.remove('searching');
+    if (searchClose) { searchClose(); searchClose = null; }
+    // en el móvil, en los resultados: arriba sale lo que has buscado (como YouTube)
+    document.body.classList.toggle('insearch', r.path === '/search');
+    if (r.path !== '/search') $('#q').value = '';
     $('#suggest').hidden = true;
   });
 
@@ -75,12 +88,30 @@ const App = (() => {
     if (list) { go('/playlist?list=' + list); return; }
     const ch = (v.match(/youtube\.com\/(@[\w.-]+|channel\/UC[\w-]{22})/) || [])[1];
     if (ch) { go('/channel/' + ch.replace('channel/', '')); return; }
+    remember(v);
     go('/search?q=' + encodeURIComponent(v));
   };
+  // lo último que has buscado (sale al tocar el buscador, antes de escribir)
+  const recent = () => M4.store.get('recentQ', []);
+  function remember(v) { M4.store.set('recentQ', [v, ...recent().filter(x => x.toLowerCase() !== v.toLowerCase())].slice(0, 12)); }
+  function showRecent() {
+    const list = recent();
+    if (q.value.trim() || !list.length) { if (!q.value.trim()) sug.hidden = true; return; }
+    sel = -1;
+    sug.replaceChildren(...list.map(s => h('button.rec', { type: 'button', onmousedown: e => e.preventDefault(), onclick: () => { q.value = s; $('#searchForm').requestSubmit(); } },
+      icon('history'), h('span', null, s),
+      h('i.del', { title: 'Quitar', onmousedown: e => e.preventDefault(), onclick: e => { e.stopPropagation(); M4.store.set('recentQ', recent().filter(x => x !== s)); showRecent(); } }, icon('close')))));
+    sug.hidden = false;
+  }
+  q.addEventListener('focus', () => {
+    // en el móvil, tocar la búsqueda de arriba (en los resultados) la abre a pantalla completa
+    if (innerWidth <= 760 && !document.body.classList.contains('searching')) openSearch(false);
+    if (!q.value.trim()) showRecent();
+  });
   q.addEventListener('input', () => {
     clearTimeout(sugT);
     const v = q.value.trim();
-    if (!v) { sug.hidden = true; return; }
+    if (!v) { showRecent(); return; }
     sugT = setTimeout(async () => {
       const list = await YT.suggest(v);
       if (q.value.trim() !== v || document.activeElement !== q) return;
@@ -99,11 +130,26 @@ const App = (() => {
       q.value = bs[sel].textContent;
     } else if (e.key === 'Escape') sug.hidden = true;
   });
-  q.addEventListener('blur', () => setTimeout(() => { sug.hidden = true; }, 150));
-  $('#btnSearchM').onclick = () => { document.body.classList.add('searching'); setTimeout(() => q.focus(), 30); searchClose = M4.pushClose(closeSearch); };
+  q.addEventListener('blur', () => setTimeout(() => { if (!document.body.classList.contains('searching')) sug.hidden = true; }, 150));
   let searchClose = null;
-  const closeSearch = () => { document.body.classList.remove('searching'); if (searchClose) { searchClose(); searchClose = null; } };
-  $('#searchBack').onclick = closeSearch;
+  function openSearch(focus) {
+    document.body.classList.add('searching');
+    if (!searchClose) searchClose = M4.pushClose(closeSearch);
+    if (focus) setTimeout(() => { q.focus(); q.select(); }, 30);
+  }
+  $('#btnSearchM').onclick = () => openSearch(true);
+  function closeSearch() {
+    document.body.classList.remove('searching'); sug.hidden = true;
+    if (searchClose) { searchClose(); searchClose = null; }
+    // (en los resultados vuelve a salir lo que habías buscado)
+    if (document.body.classList.contains('insearch')) q.value = new URLSearchParams(location.hash.split('?')[1] || '').get('q') || q.value;
+    q.blur();
+  }
+  // la flecha: cierra la búsqueda; en los resultados, vuelve a donde estabas
+  $('#searchBack').onclick = () => {
+    if (document.body.classList.contains('searching')) closeSearch();
+    else if (history.length > 1) history.back(); else go('/');
+  };
   document.addEventListener('keydown', e => {
     if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); q.focus(); q.select(); }
     if (e.key === 'Escape') M4.closeTop();

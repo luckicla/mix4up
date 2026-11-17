@@ -543,7 +543,8 @@ html.tb-full #top { display: none; }
 @media (max-width: 760px) {
   :root { --top: 48px; --cardw: 100%; }
   body { font-size: 14px; }
-  #top { gap: 2px; padding: 0 4px 0 12px; transition: transform .2s ease; }
+  /* (el padding de arriba es la barra de notificaciones: sin él, la foto y la lupa se metían encima de la batería) */
+  #top { gap: 2px; padding: var(--sat) 6px 0 12px; transition: transform .2s ease; }
   body.top-hidden:not(.watching) #top { transform: translateY(calc(-100% - 2px)); }
   body.top-hidden:not(.watching) #main { top: var(--sat); }
   #main { transition: top .2s ease; }
@@ -893,3 +894,85 @@ body.fullscreen::before { display: none; }
   html[data-nav="mini"] #tabs .tabind { top: 8px; width: 50px; height: 38px; border-radius: 19px; }
   #tabs a.on img.tface { box-shadow: 0 0 0 2px var(--acc); }
 }
+
+/* ---------- móvil: la barra de arriba y la búsqueda ---------- */
+@media (max-width: 760px) {
+  .brand { margin-right: 4px; min-width: 0; }
+  #btnAccount img.face { width: 28px; height: 28px; }
+  #q { height: 38px; border: 0; background: var(--bg3); border-radius: 19px; padding: 0 16px; font-size: 15px; }
+  #q:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 55%, transparent); }
+  /* buscando: el buscador ocupa la barra de arriba; debajo, a pantalla completa, sugerencias o lo último que buscaste */
+  body.searching #searchForm { inset: var(--sat) 0 auto 0; height: var(--top); padding: 0 10px 0 4px; }
+  body.searching #main, body.searching #tabs, body.searching #mini { visibility: hidden; }
+  body.searching #suggest { position: fixed; top: calc(var(--sat) + var(--top)); left: 0; right: 0; bottom: 0; border: 0; border-radius: 0; box-shadow: none; background: var(--bg); padding: 4px 0 calc(16px + var(--sab)); overflow-y: auto; }
+  body.searching #suggest button { padding: 12px 16px 12px 18px; font-size: 15px; gap: 18px; }
+  /* en los resultados: arriba sale lo que has buscado (tócalo para cambiarlo) */
+  body.insearch:not(.searching):not(.watching) .brand, body.insearch:not(.searching):not(.watching) .tright { display: none !important; }
+  body.insearch:not(.searching) #searchForm { display: flex; flex: 1; margin: 0 0 0 -8px; align-items: center; gap: 4px; max-width: none; }
+}
+#suggest .rec span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#suggest .del { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; margin: -8px -8px -8px 0; color: var(--fg2); }
+#suggest .del:active { background: var(--bg3); }
+#suggest .del svg { width: 18px; height: 18px; }
+
+/* ---------- la pantalla de inicio ---------- */
+.hello { padding: 4px 0 18px; }
+.hello small { display: block; font-size: 12.5px; font-weight: 600; color: var(--fg2); letter-spacing: .02em; }
+.hello small::first-letter { text-transform: uppercase; }
+.hello h1 { font-size: 28px; font-weight: 800; letter-spacing: -.5px; line-height: 1.15; margin-top: 2px; }
+.hello h1 span { background: linear-gradient(90deg, var(--acc), color-mix(in srgb, var(--acc2) 75%, var(--fg))); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.shelfhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 14px; }
+.shelf .shelfhead h2, .shelfhead h2 { margin: 0; display: flex; align-items: center; gap: 9px; font-size: 19px; }
+.shelfhead h2 svg { width: 21px; height: 21px; color: var(--acc); }
+.more2 { font-size: 13px; font-weight: 700; color: var(--acc); padding: 6px 2px; }
+.quick { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.quick a { flex: none; display: flex; align-items: center; gap: 9px; height: 46px; padding: 0 14px 0 6px; border-radius: 23px; background: var(--bg2); border: 1px solid color-mix(in srgb, var(--fg) 7%, transparent); transition: transform .12s, background .2s; }
+.quick a:active { transform: scale(.95); background: var(--bg3); }
+.quick i { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--acc) 16%, transparent); color: var(--acc); }
+.quick a:nth-child(even) i { background: color-mix(in srgb, var(--acc2) 15%, transparent); color: color-mix(in srgb, var(--acc2) 70%, var(--fg)); }
+.quick i svg { width: 19px; height: 19px; }
+.quick span { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.quick small { font-size: 11.5px; font-weight: 700; color: var(--fg2); font-variant-numeric: tabular-nums; margin-left: -2px; }
+.homesubs a.all .ph0 { background: var(--bg3); color: var(--fg2); }
+.homesubs .ph0 svg { width: 26px; height: 26px; }
+@media (max-width: 760px) {
+  .hello { padding: 16px 16px 12px; }
+  .hello h1 { font-size: 26px; }
+  .home > .banner { margin-top: 4px; }
+  .quick { padding: 2px 12px 4px; }
+  .home .homesubs { padding: 14px 12px 4px; margin: 0; border-bottom: 0; gap: 14px; }
+  .home .homesubs a { width: 64px; }
+  .home .homesubs img, .home .homesubs .ph0 { width: 54px; height: 54px; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px color-mix(in srgb, var(--acc) 45%, transparent); }
+  .home .homesubs a.all .ph0 { box-shadow: none; }
+  .shelf { margin: 4px 0 10px; }
+  .shelfhead { margin: 18px 12px 10px; }
+  .shelf .shelfhead h2, .shelfhead h2 { font-size: 18px; }
+  .foryou { margin-top: 14px; margin-bottom: 0; }
+  .home .hscroll { padding: 0 12px 4px; gap: 10px; scroll-snap-type: x mandatory; scroll-padding: 0 12px; }
+  .home .hscroll .card { width: 64vw; max-width: 280px; scroll-snap-align: start; }
+  .home .hscroll .card .thumb { border-radius: 12px; }
+  .home .hscroll .card .meta h3 { font-size: 13.5px; }
+  .home .hscroll .card .more { top: calc(min(64vw, 280px) * .5625 + 4px) !important; right: -10px; }
+  /* las miniaturas del móvil: con un poco de margen y esquinas redondeadas (más limpio que de borde a borde) */
+  .grid .card { padding-bottom: 22px; }
+  .grid .card .thumb { margin: 0 12px; border-radius: 14px; }
+  .grid .card .meta { margin: 11px 4px 0 14px; }
+  .grid .card .more { top: calc((100vw - 24px) * .5625 + 8px); }
+  .grid.skel .card .line { margin-left: 14px; margin-right: 14px; }
+  .grid.skel .card .line:first-of-type { margin-top: 14px; }
+}
+
+/* ---------- la barra de abajo: la pastilla siempre centrada en el icono (la coloca app.js) ---------- */
+@media (max-width: 760px) {
+  #tabs .tabind { width: 58px; height: 32px; border-radius: 16px; }
+  html[data-nav="mini"] #tabs .tabind { width: 52px; height: 38px; border-radius: 19px; }
+  /* clásica: pegada abajo, pero también algo translúcida y con su pastilla */
+  html[data-nav="solid"] #tabs { background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3); border-top: 1px solid color-mix(in srgb, var(--fg) 8%, transparent); }
+  html[data-nav="solid"] #tabs a { position: relative; gap: 4px; }
+  html[data-nav="solid"] #tabs a.on { color: var(--fg); }
+  /* mini: solo iconos, más grandes */
+  html[data-nav="mini"] #tabs a svg, html[data-nav="mini"] #tabs a img { width: 26px; height: 26px; }
+  html[data-nav="floatSolid"] #tabs { border-color: var(--line); }
+}
+/* (buscando, la barra de arriba no puede tener filtro ni moverse: si no, las sugerencias no llenan la pantalla) */
+@media (max-width: 760px) { body.searching #top { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg); transform: none !important; } }

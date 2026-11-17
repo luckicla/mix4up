@@ -76,9 +76,24 @@ const M4 = (() => {
     let st = document.getElementById('m4ins');
     if (!st) { st = document.createElement('style'); st.id = 'm4ins'; document.head.append(st); }
     st.textContent = `:root{--sat:${Math.max(0, +top || 0)}px;--sab:${Math.max(0, +bottom || 0)}px}`;
+    // (se guardan: la próxima vez la barra de arriba ya sale en su sitio desde el primer momento)
+    if (+top > 0) try { localStorage.setItem('m4.ins', JSON.stringify({ top: +top, bottom: +bottom || 0 })); } catch {}
   }
   window.M4insets = setInsets;
-  if (ANDROID) try { const i = JSON.parse(Mix4UpAndroid.getInsets() || '{}'); if (i.top != null) setInsets(i.top, i.bottom); } catch {}
+  // el móvil puede mandar los márgenes antes de que la página esté lista (y se perdían):
+  // se piden otra vez al arrancar, al girar y al volver a la app
+  function askInsets() {
+    if (!ANDROID) return false;
+    try { const i = JSON.parse(Mix4UpAndroid.getInsets() || '{}'); if (i.top != null) { setInsets(i.top, i.bottom); return true; } } catch {}
+    return false;
+  }
+  if (ANDROID) {
+    let tries = 0;
+    const retry = () => { if (!askInsets() && ++tries < 20) setTimeout(retry, 150); };
+    retry();
+    addEventListener('resize', () => setTimeout(askInsets, 120));
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(askInsets, 120); });
+  }
   function barsFor() {
     if (!ANDROID) return;
     const d = document.documentElement;

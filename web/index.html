@@ -12,6 +12,8 @@
 <script>
   // el aspecto guardado, antes de pintar nada (sin parpadeo)
   try { const l = JSON.parse(localStorage.getItem('m4.look') || 'null'); if (l) document.documentElement.setAttribute('style', l.css), document.documentElement.dataset.theme = l.theme, document.documentElement.dataset.nav = l.nav || 'float'; } catch (e) {}
+  // los márgenes de la barra de notificaciones de la última vez (así nada se mete debajo de la batería al abrir)
+  try { const i = JSON.parse(localStorage.getItem('m4.ins') || 'null'); if (i && window.Mix4UpAndroid) document.write('<style id="m4ins">:root{--sat:' + (+i.top || 0) + 'px;--sab:' + (+i.bottom || 0) + 'px}</style>'); } catch (e) {}
 </script>
 </head>
 <body>
