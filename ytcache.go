@@ -40,6 +40,8 @@ type ytCacheFile struct {
 	have    []bool
 	busy    []bool
 	got     []int64 // lo que ya ha llegado de cada trozo (se manda al vídeo sin esperar al trozo entero)
+	tailAt  int64   // el final del archivo, que se baja aparte nada más empezar:
+	tailOK  bool    // Chrome lo lee antes de reproducir nada (y antes se bajaba el último)
 	left    int
 	prio    int // trozo por el que empezar (donde se está mirando)
 	used    time.Time
@@ -137,6 +139,8 @@ func cacheFor(id, fid string) (*ytCacheFile, error) {
 	}
 	ytCache.files[key] = c
 	ytCache.Unlock()
+	c.tailAt = max(0, size-cacheTail)
+	go c.fetchTail()
 	c.start()
 	return c, nil
 }
@@ -224,6 +228,35 @@ func (c *ytCacheFile) work() {
 				return
 			}
 		}
+	}
+}
+
+const cacheTail = 256 << 10
+
+// fetchTail: el final del archivo, aparte y enseguida (Chrome lo mira antes de empezar a reproducir)
+func (c *ytCacheFile) fetchTail() {
+	for try := 0; try < 2; try++ {
+		c.mu.Lock()
+		f, from := c.fmt, c.tailAt
+		c.mu.Unlock()
+		resp, err := f.fetch(from, c.size-1)
+		if err != nil {
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		b, err := io.ReadAll(io.LimitReader(resp.Body, c.size-from))
+		resp.Body.Close()
+		if err != nil || int64(len(b)) != c.size-from {
+			continue
+		}
+		if _, err := c.f.WriteAt(b, from); err != nil {
+			return
+		}
+		c.mu.Lock()
+		c.tailOK = true
+		c.cond.Broadcast()
+		c.mu.Unlock()
+		return
 	}
 }
 
@@ -414,7 +447,10 @@ func (c *ytCacheFile) wait(pos int64, r *http.Request) (int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	deadline := time.Now().Add(60 * time.Second)
-	for !c.have[i] && base+c.got[i] <= pos {
+	for !c.have[i] && base+c.got[i] <= pos && !(c.tailOK && pos >= c.tailAt) {
+		// lo que alguien está esperando ya, lo primero (Chrome pide también el final del archivo y lo deja:
+		// eso no puede quitarle el turno al principio, que es lo que hace falta para empezar)
+		c.prio = i
 		if c.err != nil {
 			return 0, c.err
 		}
@@ -431,6 +467,9 @@ func (c *ytCacheFile) wait(pos int64, r *http.Request) (int64, error) {
 		}
 		go func() { time.Sleep(time.Second); c.mu.Lock(); c.cond.Broadcast(); c.mu.Unlock() }()
 		c.cond.Wait()
+	}
+	if c.tailOK && pos >= c.tailAt {
+		return c.size, nil
 	}
 	if c.have[i] {
 		return min(c.size, base+cacheChunk), nil

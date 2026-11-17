@@ -364,7 +364,8 @@ const Player = (() => {
   const diag = m => { try { if (ANDROID) A.diag(m); } catch {} };
   let stuckAt = 0, stuckT = -1, stuckStep = 0;
   setInterval(() => {
-    if (!item || item.src !== 'yt' || !info || !qual || !want || document.hidden || !el.classList.contains('waiting') || el.querySelector('.perr')) { stuckAt = 0; return; }
+    // (no basta con mirar si está «cargando»: con imagen y sonido por separado, el sonido puede quedarse esperando a la imagen sin aviso)
+    if (!item || item.src !== 'yt' || !info || !qual || !want || master().ended || document.hidden || el.querySelector('.perr')) { stuckAt = 0; return; }
     const t = now();
     if (t !== stuckT) { stuckT = t; stuckAt = Date.now(); return; }
     if (!stuckAt) { stuckAt = Date.now(); return; }

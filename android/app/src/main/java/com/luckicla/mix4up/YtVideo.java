@@ -366,7 +366,7 @@ final class YtVideo {
     private static final ExecutorService POOL = Executors.newCachedThreadPool();
 
     static final class CacheFile {
-        String key, id, fid, mime; File path; long size; RandomAccessFile raf; boolean[] have, busy; long[] got; int left, prio, workers; long used; String err; Format fmt;
+        String key, id, fid, mime; File path; long size; RandomAccessFile raf; boolean[] have, busy; long[] got; long tailAt; boolean tailOK; int left, prio, workers; long used; String err; Format fmt;
         synchronized void touch() { used = System.currentTimeMillis(); }
     }
 
@@ -408,6 +408,9 @@ final class YtVideo {
             if (old != null) { try { c.raf.close(); } catch (IOException ignored) {} c.path.delete(); old.touch(); return old; }
             files.put(key, c);
         }
+        // el final del archivo, aparte y enseguida: Chrome lo mira antes de reproducir nada (y antes se bajaba el último)
+        c.tailAt = Math.max(0, size - TAIL);
+        POOL.execute(() -> fetchTail(c));
         start(c);
         return c;
     }
@@ -460,6 +463,24 @@ final class YtVideo {
             }
         } finally {
             synchronized (c) { c.workers--; }
+        }
+    }
+
+    private static final long TAIL = 256L << 10;
+    private static void fetchTail(CacheFile c) {
+        for (int t = 0; t < 2; t++) {
+            Format f; long from;
+            synchronized (c) { f = c.fmt; from = c.tailAt; }
+            try {
+                HttpURLConnection h = fetch(f, from, c.size - 1);
+                byte[] b = Http.readAll(h.getInputStream());
+                if (b.length < c.size - from) continue;
+                synchronized (c.raf) { c.raf.seek(from); c.raf.write(b, 0, (int) (c.size - from)); }
+                synchronized (c) { c.tailOK = true; c.notifyAll(); }
+                return;
+            } catch (IOException e) {
+                try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+            }
         }
     }
 
@@ -517,11 +538,15 @@ final class YtVideo {
         long base = (long) i * CHUNK, ce = Math.min(c.size, base + CHUNK);
         long deadline = System.currentTimeMillis() + 60_000;
         synchronized (c) {
-            while (!c.have[i] && base + c.got[i] <= pos) {
+            while (!c.have[i] && base + c.got[i] <= pos && !(c.tailOK && pos >= c.tailAt)) {
+                // lo que alguien está esperando ya, lo primero (Chrome pide también el final del archivo y lo deja:
+                // eso no puede quitarle el turno al principio, que es lo que hace falta para empezar)
+                c.prio = i;
                 if (c.err != null || System.currentTimeMillis() > deadline) return -1;
                 if (c.workers == 0) start(c);
                 try { c.wait(1000); } catch (InterruptedException e) { return -1; }
             }
+            if (c.tailOK && pos >= c.tailAt) return c.size;
             return c.have[i] ? ce : base + c.got[i];
         }
     }
