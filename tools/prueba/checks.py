@@ -35,7 +35,7 @@ def until(fn, secs, step=1.0):
 
 ERRS = """(() => { if (!window.__m4errs) { window.__m4errs = []; addEventListener('error', e => __m4errs.push(String(e.message) + ' @' + String(e.filename).split('/').pop() + ':' + e.lineno)); addEventListener('unhandledrejection', e => __m4errs.push('promesa: ' + String(e.reason && (e.reason.stack || e.reason)).slice(0, 300))); } return true })()"""
 
-PLAYER = "JSON.stringify({t: Player.time, playing: Player.playing, split: !!Player.audio.getAttribute('src'), vsrc: Player.video.getAttribute('src'), err: (document.querySelector('.perr p') || {}).textContent || '', title: (Player.item || {}).title || ''})"
+PLAYER = "JSON.stringify({id: (Player.item || {}).id || (Player.item || {}).lid || '', t: Player.time, playing: Player.playing, split: !!Player.audio.getAttribute('src'), vsrc: Player.video.getAttribute('src'), err: (document.querySelector('.perr p') || {}).textContent || '', title: (Player.item || {}).title || ''})"
 
 
 def player(ev):
@@ -92,7 +92,8 @@ def yt_play(ev, videos, secs=150):
     cands = [v for v in videos if (v.get('d') or 0) > 120][:3] or videos[:3]
     for v in cands:
         ev(f"location.hash = '#/watch?v={v['id']}'")
-        st = until(lambda: (lambda p: p if (p.get('t', 0) > 3 and p.get('playing')) or p.get('err') else None)(player(ev)), secs, 2)
+        time.sleep(2)
+        st = until(lambda: (lambda p: p if p.get('id') == v['id'] and ((p.get('t', 0) > 3 and p.get('playing')) or p.get('err')) else None)(player(ev)), secs, 2)
         st = st or player(ev)
         if st.get('t', 0) > 3:
             res('Un vídeo de YouTube se ve (sin anuncios)', 'OK', f"{v['t'][:60]} · imagen y sonido separados: {st.get('split')} · {st.get('vsrc')}")

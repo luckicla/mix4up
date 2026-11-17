@@ -56,7 +56,7 @@ public class MainActivity extends Activity {
     private static VideoLibrary library;
     private static String token = "";
     private static String shared;
-    private static boolean keepOn, fullscreen, inPip, playing;
+    private static boolean keepOn, fullscreen, inPip, playing, testMode;
     private static android.webkit.PermissionRequest camRequest;
     private ValueCallback<Uri[]> fileCallback;
 
@@ -166,7 +166,8 @@ public class MainActivity extends Activity {
                 web.loadUrl(origin + "/");
             });
         }).start();
-        main.postDelayed(() -> checkUpdate(false), 20_000);
+        // (en las pruebas automáticas, la actualización se prueba aparte, a mano)
+        main.postDelayed(() -> { if (!testMode) checkUpdate(false); }, 20_000);
     }
 
     @Override protected void onCreate(Bundle saved) {
@@ -176,7 +177,7 @@ public class MainActivity extends Activity {
         takeShare(getIntent());
         // (solo la versión de pruebas: las pruebas automáticas ponen su propio servidor de actualizaciones)
         String testUpd = getIntent().getStringExtra("m4update");
-        if (testUpd != null && (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) UPDATE_BASE = testUpd;
+        if (testUpd != null && (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) { UPDATE_BASE = testUpd; testMode = true; }
         if (web != null) {
             webCtx.setBaseContext(this);
             if (web.getParent() instanceof ViewGroup) ((ViewGroup) web.getParent()).removeView(web);
