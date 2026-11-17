@@ -173,6 +173,22 @@ const Player = (() => {
     if (info.live) throw new Error('Los directos aún no se pueden ver con el reproductor de Mix4Up.');
     qual = pickQuality(Settings.get().quality);
     applyQuality(start);
+    // si YouTube solo ha dado 360p (pasa a veces con yt-dlp), se vuelve a pedir de fondo: si ahora hay más, se sube sola
+    if (!info.formats.some(f => f.kind === 'v')) {
+      const id = item.id;
+      setTimeout(async () => {
+        if (!item || item.id !== id || seq !== loadSeq || !info || info.formats.some(f => f.kind === 'v')) return;
+        try {
+          const better = await api('/api/yt/video?id=' + id + '&fresh=1');
+          if (!item || item.id !== id || seq !== loadSeq || !better.formats.some(f => f.kind === 'v')) return;
+          const t = now();
+          info = better; qual = pickQuality(Settings.get().quality);
+          audio.removeAttribute('src');
+          applyQuality(t, false);
+          toast('Ya está en ' + (qual.h || '') + 'p');
+        } catch {}
+      }, 4000);
+    }
     subTracks = (info.subs || []).map(s => ({ label: (s.name || s.lang) + (s.auto ? ' (automáticos)' : ''), lang: s.lang.replace('-orig', ''), auto: s.auto,
       url: `/api/yt/sub?id=${item.id}&lang=${encodeURIComponent(s.lang)}&auto=${s.auto ? 1 : 0}` }));
     addTracks();

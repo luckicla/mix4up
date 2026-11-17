@@ -123,13 +123,16 @@ final class YtVideo {
         Object lock;
         synchronized (locks) { lock = locks.get(id); if (lock == null) { lock = new Object(); locks.put(id, lock); } }
         synchronized (lock) {
+            Info prev;
             synchronized (cache) {
                 Info i = cache.get(id);
+                prev = i;
                 if (i != null && !fresh && i.exp - System.currentTimeMillis() > 10 * 60_000L) return i;
             }
             Info in = null;
-            // primero el camino rápido (como el PC): sin yt-dlp, al momento
-            if (!fresh && System.currentTimeMillis() > fastOffTil) {
+            // primero el camino rápido (como el PC): sin yt-dlp, al momento. También al renovar, salvo que lo que
+            // falló fuera justo lo del camino rápido (yt-dlp a veces solo da 360p y eso no puede quedarse)
+            if (!(fresh && prev != null && prev.client == -1) && System.currentTimeMillis() > fastOffTil) {
                 long t0 = System.currentTimeMillis();
                 try { in = fast(id); fastFails = 0; Diag.log("yt " + id + ": rápido en " + (System.currentTimeMillis() - t0) + " ms"); }
                 catch (Exception e) {
@@ -153,12 +156,20 @@ final class YtVideo {
     }
     private static Info resolve(String id) throws IOException {
         IOException last = null;
+        Info poor = null; // uno que solo da 360p (imagen y sonido juntos): solo si ningún otro da más
         int first = goodClient;
         for (int i = 0; i < CLIENTS.length; i++) {
             int k = (first + i) % CLIENTS.length;
-            try { Info in = resolveWith(id, CLIENTS[k]); in.client = k; goodClient = k; return in; }
+            try {
+                Info in = resolveWith(id, CLIENTS[k]); in.client = k;
+                boolean adaptive = false;
+                for (Format f : in.formats) if ("v".equals(f.kind)) { adaptive = true; break; }
+                if (!adaptive) { Diag.log("yt " + id + ": el cliente " + k + " solo da 360p; pruebo otro"); if (poor == null) poor = in; continue; }
+                goodClient = k; return in;
+            }
             catch (IOException e) { last = e; if (GONE.matcher(String.valueOf(e.getMessage())).find()) throw e; }
         }
+        if (poor != null) return poor;
         throw last;
     }
     private static Info resolveWith(String id, String client) throws IOException {

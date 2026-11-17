@@ -616,7 +616,7 @@ const Views = (() => {
       try { jobs = await api('/api/download'); } catch (e) { listBox.replaceChildren(errorBox(e, paint)); return; }
       listBox.replaceChildren(...(jobs.length ? jobs.slice().reverse().map(j => h('div.dl', null,
         h('img', { src: `https://i.ytimg.com/vi/${j.id}/mqdefault.jpg`, alt: '', style: { width: '120px', aspectRatio: '16/9', objectFit: 'cover', borderRadius: '8px' } }),
-        h('div.t', null, h('b', null, j.title || j.id), h('div.muted', null, j.state === 'done' ? 'Descargado · ' + (j.file || '') : j.state === 'error' ? 'Error: ' + j.error : j.state === 'queued' ? 'En cola' : 'Descargando… ' + Math.round(j.pct) + '%'),
+        h('div.t', null, h('b', null, j.title || j.id), h('div.muted', null, j.state === 'done' ? 'Descargado · ' + (j.file || '') : j.state === 'error' ? 'Error: ' + (j.error || 'no se sabe cuál (mira el registro)') : j.state === 'queued' ? 'En cola' : 'Descargando… ' + Math.round(j.pct) + '%'),
           j.state === 'running' ? h('div.pbar', null, h('i', { style: { width: j.pct + '%' } })) : ''),
         j.state === 'done' ? h('a.btn', { href: '#/watch?v=' + j.id }, icon('play'), 'Ver') : '',
         h('button.ib', { title: j.state === 'running' ? 'Cancelar' : 'Quitar de la lista', onclick: async () => { await api('/api/download?key=' + j.key, { method: 'DELETE' }); paint(); } }, icon('close'))))

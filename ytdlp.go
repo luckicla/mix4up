@@ -390,7 +390,8 @@ var ytClients = []string{"", "tv", "web_safari", "mweb"}
 
 func (y *ytResolver) get(id string, fresh bool) (*ytInfo, error) {
 	y.mu.Lock()
-	if in := y.cache[id]; in != nil && !fresh && time.Until(in.exp) > 10*time.Minute {
+	prev := y.cache[id]
+	if in := prev; in != nil && !fresh && time.Until(in.exp) > 10*time.Minute {
 		y.mu.Unlock()
 		return in, nil
 	}
@@ -407,8 +408,9 @@ func (y *ytResolver) get(id string, fresh bool) (*ytInfo, error) {
 	y.inflight[id] = c
 	y.mu.Unlock()
 
-	// primero el camino rápido (ytfast.go); si no, yt-dlp
-	if !fresh && !fastOff() && os.Getenv("MIX4UP_YTDLP") == "" {
+	// primero el camino rápido (ytfast.go); si no, yt-dlp. También al renovar (fresh), salvo que lo que
+	// falló fuera justo lo del camino rápido: yt-dlp a veces solo da 360p y eso no puede quedarse para siempre
+	if !(fresh && prev != nil && prev.client == -1) && !fastOff() && os.Getenv("MIX4UP_YTDLP") == "" {
 		t0 := time.Now()
 		if in, err := fastInfo(id, ytVisitor()); err == nil {
 			in.client = -1
@@ -461,9 +463,18 @@ func (y *ytResolver) resolve(id string) (*ytInfo, error) {
 	first := y.goodClient
 	y.mu.Unlock()
 	var lastErr error
+	var poor *ytInfo // uno que solo da 360p (imagen y sonido juntos): se usa solo si ningún otro da más
 	for i := 0; i < len(ytClients); i++ {
 		k := (first + i) % len(ytClients)
 		in, err := y.resolveWith(id, ytClients[k])
+		if err == nil && !in.hasAdaptive() {
+			logf("yt: %s: el cliente %d solo da 360p; pruebo otro", id, k)
+			if poor == nil {
+				in.client = k
+				poor = in
+			}
+			continue
+		}
 		if err == nil {
 			in.client = k
 			y.mu.Lock()
@@ -477,7 +488,20 @@ func (y *ytResolver) resolve(id string) (*ytInfo, error) {
 		}
 		logf("yt: %s: %v; pruebo otro cliente", id, err)
 	}
+	if poor != nil {
+		return poor, nil
+	}
 	return nil, lastErr
+}
+
+// hasAdaptive: ¿hay imagen por separado (más de 360p)?
+func (in *ytInfo) hasAdaptive() bool {
+	for _, f := range in.Formats {
+		if f.Kind == "v" {
+			return true
+		}
+	}
+	return false
 }
 
 func ytBaseArgs() []string {

@@ -146,7 +146,9 @@ func (d *downloads) run(j *dlJob) {
 		args = append(args[:0:0], append(ytBaseArgs(), "--no-playlist", "--newline", "--progress", "--progress-template", "download:M4P %(progress._percent_str)s",
 			"-f", "b[ext=mp4]/b", "-o", filepath.Join(dir, "%(title).120B [%(id)s].%(ext)s"), "--print", "after_move:filepath")...)
 	}
-	args = append(args, "--", "https://www.youtube.com/watch?v="+j.ID)
+	// (en Windows, sin esto, yt-dlp escribe la ruta con otra codificación: un título con tildes, como
+	//  «He caído.», no se reconocía y la descarga, aunque bien hecha, salía como «Error: undefined»)
+	args = append(args, "--encoding", "utf-8", "--", "https://www.youtube.com/watch?v="+j.ID)
 	cmd := exec.CommandContext(ctx, exe, args...)
 	hideConsole(cmd)
 	out, _ := cmd.StdoutPipe()
@@ -168,6 +170,16 @@ func (d *downloads) run(j *dlJob) {
 		}
 	}
 	err := cmd.Wait()
+	if err == nil && file == "" {
+		// ¿lo bajó pero no se entendió la ruta? se busca por el código del vídeo
+		ents, _ := os.ReadDir(dir)
+		for _, e := range ents {
+			n := e.Name()
+			if x := strings.ToLower(filepath.Ext(n)); strings.Contains(n, "["+j.ID+"].") && x != ".part" && x != ".ytdl" && x != ".webp" && x != ".jpg" {
+				file = filepath.Join(dir, n)
+			}
+		}
+	}
 	if err != nil || file == "" {
 		msg := strings.TrimSpace(stderr.String())
 		if i := strings.LastIndex(msg, "ERROR:"); i >= 0 {
@@ -178,6 +190,9 @@ func (d *downloads) run(j *dlJob) {
 		}
 		if msg == "" && err != nil {
 			msg = err.Error()
+		}
+		if msg == "" {
+			msg = "yt-dlp terminó sin dejar el archivo"
 		}
 		logf("descarga %s: %s", j.ID, msg)
 		d.set(j, func() { j.State, j.Error = "error", friendly(errorString(msg)) })
