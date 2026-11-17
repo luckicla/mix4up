@@ -57,6 +57,9 @@ public class MainActivity extends Activity {
     private static String token = "";
     private static String shared;
     private static boolean keepOn, fullscreen, inPip, playing, testMode, watching;
+    private static volatile boolean bgAllowed = true;
+    private static boolean inBg;
+    static void bgNow(boolean on) { if (inBg == on) return; inBg = on; js("window.M4bg && M4bg(" + on + ")"); }
     private static android.webkit.PermissionRequest camRequest;
     private ValueCallback<Uri[]> fileCallback;
 
@@ -75,7 +78,15 @@ public class MainActivity extends Activity {
     @SuppressLint("SetJavaScriptEnabled")
     private static void makeWeb(Context base) {
         webCtx = new MutableContextWrapper(base);
-        web = new WebView(webCtx);
+        web = new WebView(webCtx) {
+            // con un vídeo sonando, la página no se entera de que la app se fue al fondo
+            // o se apagó la pantalla: así el móvil no lo para (sigue sonando)
+            @Override protected void onWindowVisibilityChanged(int v) {
+                if (v != View.VISIBLE && playing && bgAllowed) { bgNow(true); super.onWindowVisibilityChanged(View.VISIBLE); return; }
+                if (v == View.VISIBLE) bgNow(false);
+                super.onWindowVisibilityChanged(v);
+            }
+        };
         web.setBackgroundColor(Color.parseColor("#0F0F13"));
         web.setOnLongClickListener(v -> true);
         web.setLongClickable(false);
@@ -478,7 +489,7 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void askVideoPermission() { withWindow(MainActivity::askPermissions); }
         @JavascriptInterface public void setKeepScreenOn(boolean on) {
-            playing = on;
+            if (on) playing = true;
             withWindow(a -> { keepOn = on; if (on) a.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); else a.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); });
         }
         @JavascriptInterface public void setWatching(boolean on) { watching = on; }
@@ -507,7 +518,9 @@ public class MainActivity extends Activity {
                 if (!j.has("title")) { PlaybackService.stop(app); return; }
                 PlaybackService.State s = new PlaybackService.State();
                 s.title = j.optString("title", "Mix4Up"); s.channel = j.optString("channel"); s.thumb = j.optString("thumb");
-                s.playing = j.optBoolean("playing") && j.optBoolean("bg", true);
+                bgAllowed = j.optBoolean("bg", true);
+                playing = j.optBoolean("playing");
+                s.playing = j.optBoolean("playing") && bgAllowed;
                 s.posMs = (long) (j.optDouble("pos", 0) * 1000); s.durMs = (long) (j.optDouble("dur", 0) * 1000);
                 PlaybackService.loadArt(app, s);
                 if (s.playing || PlaybackService.isPlaying()) PlaybackService.update(app, s);

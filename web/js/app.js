@@ -204,6 +204,7 @@ const App = (() => {
   };
   window.M4remote = cmd => Player.remote(cmd);
   window.M4pip = on => Player.onPip(on);
+  window.M4bg = on => Player.setBg(on);
   // un enlace compartido a Mix4Up desde YouTube (en el móvil)
   window.M4shared = () => {
     let t = '';

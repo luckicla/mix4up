@@ -267,7 +267,7 @@ const Player = (() => {
     holding = false;
     video.pause();
   }
-  function twinIfHidden() { if (ANDROID && bgHidden() && Settings.get().bgPlay !== false) goTwin(); }
+  function twinIfHidden() { if (ANDROID && document.hidden && !document.body.classList.contains('pip') && Settings.get().bgPlay !== false) goTwin(); }
 
   /* ---------- subtítulos ---------- */
   function addTracks() {
@@ -300,7 +300,14 @@ const Player = (() => {
 
   /* ---------- sincronizar imagen y sonido ---------- */
   let holding = false; // el sonido espera a que la imagen esté lista
-  const bgHidden = () => document.hidden && !document.pictureInPictureElement && !document.body.classList.contains('pip');
+  let bgFlag = false; // la app del móvil avisa: estás fuera de la app (la página sigue «visible» para no pararse)
+  const bgHidden = () => (document.hidden || bgFlag) && !document.pictureInPictureElement && !document.body.classList.contains('pip');
+  function setBg(on) {
+    bgFlag = !!on;
+    if (!split || audioOnly) return;
+    if (bgHidden()) { holding = false; video.pause(); }
+    else if (want) { try { video.currentTime = audio.currentTime; } catch {} video.play().catch(() => {}); }
+  }
   // un solo «director» cada 200 ms: el sonido manda, la imagen lo sigue
   setInterval(() => {
     if (!split || !item) return;
@@ -989,6 +996,7 @@ const Player = (() => {
 
   return {
     el, video, audio, open, close, mount, play, pause, toggle, seek, skip, next, setQueue, setSpeed, setSleep, toggleFS, pip, onPip, remote,
+    setBg,
     get item() { return item; }, get info() { return info; }, get playing() { return want && !!item && (!master().paused || holding); },
     get time() { return now(); }, get duration() { return total(); }, isFS, keyOf, sleepLabel, openMenu,
   };
