@@ -184,7 +184,8 @@ const SettingsPage = (() => {
 
     // actualizaciones
     const upd = h('div.set');
-    page.append(h('section', null, h('h2', null, icon('refresh'), 'Actualizaciones'), upd, sw('autoUpdate', 'Actualizar sola', 'Mix4Up se baja e instala las versiones nuevas sin preguntar.')));
+    page.append(h('section', null, h('h2', null, icon('refresh'), 'Actualizaciones'), upd, sw('autoUpdate', 'Actualizar sola', 'Mix4Up se baja e instala las versiones nuevas sin preguntar.'),
+      h('div.set', null, h('span', null, 'Web oficial', h('small', null, 'Mix²: Mix4Up y MixUp en una web, con las descargas y las novedades')), h('a.btn.ghost', { href: 'https://luckicla.github.io/mix2-project/', target: '_blank', rel: 'noopener' }, 'Abrir'))));
     paintUpdate(upd, info);
 
     // herramientas
