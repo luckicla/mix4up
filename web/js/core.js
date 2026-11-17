@@ -63,7 +63,8 @@ const M4 = (() => {
     mono: 'ui-monospace, "Cascadia Code", Consolas, monospace',
     narrow: '"Arial Narrow", "Roboto Condensed", "Segoe UI", sans-serif',
   };
-  const CARDW = { compact: 230, normal: 300, big: 380 };
+  // las miniaturas crecen con la ventana (en pantalla grande caben más y más grandes)
+  const CARDW = { compact: 'clamp(200px, 9vw + 60px, 300px)', normal: 'clamp(250px, 11vw + 90px, 400px)', big: 'clamp(320px, 15vw + 110px, 540px)' };
   function contrastText(hex) {
     const n = parseInt(String(hex).replace('#', '').padEnd(6, '0').slice(0, 6), 16);
     const r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
@@ -75,7 +76,7 @@ const M4 = (() => {
     d.dataset.nav = s.navStyle || 'float';
     const vars = {
       '--acc': s.accent, '--acc2': s.accent2, '--accfg': contrastText(s.accent),
-      '--r': (+s.radius || 0) + 'px', '--navA': Math.max(20, Math.min(100, +s.navAlpha || 72)) + '%', '--cardw': (CARDW[s.density] || 300) + 'px', '--font': FONTS[s.font] || FONTS.system,
+      '--r': (+s.radius || 0) + 'px', '--navA': Math.max(20, Math.min(100, +s.navAlpha || 72)) + '%', '--cardw': CARDW[s.density] || CARDW.normal, '--font': FONTS[s.font] || FONTS.system,
     };
     const css = Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(';');
     d.setAttribute('style', css);

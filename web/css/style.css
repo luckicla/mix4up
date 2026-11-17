@@ -858,3 +858,26 @@ html[data-nav] #tabs a.on::before { display: none; }
 .pm .slcustom span { white-space: nowrap; font-size: 12.5px; }
 .pm .slcustom { gap: 4px; }
 .pm .slcustom b { min-width: 54px; font-size: 14px; }
+
+/* ---------- pantalla grande (PC maximizado): aprovechar el sitio ---------- */
+@media (min-width: 1200px) {
+  #view { padding: 20px clamp(24px, 2.2vw, 56px) 80px; }
+  .grid { gap: clamp(32px, 2.4vw, 48px) clamp(16px, 1.1vw, 24px); }
+  #searchForm { max-width: clamp(640px, 40vw, 820px); }
+  .watch { max-width: none; grid-template-columns: minmax(0, 1fr) clamp(360px, 24vw, 500px); gap: clamp(24px, 1.8vw, 36px); padding: 20px clamp(24px, 2.2vw, 56px) 80px; }
+  .watch.theater { grid-template-columns: minmax(0, 1fr) clamp(360px, 24vw, 500px); }
+  .related .card .thumb { width: clamp(168px, 9vw, 220px); }
+  .row-list { max-width: min(1600px, 100%); }
+  .row-list .card .thumb { width: clamp(320px, 22vw, 480px); }
+  .settings { max-width: 1500px; columns: 2 520px; column-gap: 22px; }
+  .settings section { break-inside: avoid; display: inline-block; width: 100%; }
+  .hscroll .card { width: clamp(200px, 13vw, 300px); }
+  .hscroll .card .more { top: calc(clamp(200px, 13vw, 300px) * .5625 + 4px) !important; }
+  .libgrid { grid-template-columns: repeat(auto-fill, minmax(clamp(150px, 11vw, 220px), 1fr)); }
+}
+@media (min-width: 1800px) {
+  .meta h3 { font-size: 16px; }
+  .meta .sub { font-size: 13.5px; }
+  .vtitle { font-size: 22px; }
+}
+@media (min-width: 1200px) { .watch .playhost { max-height: calc(100vh - var(--top, 56px) - 140px); } }
