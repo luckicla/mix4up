@@ -383,11 +383,11 @@ const Player = (() => {
   }, 2000);
 
   function onError(m) {
-    diag('error del vídeo ' + (item && item.id) + ': ' + (m.error ? m.error.code + ' ' + (m.error.message || '') : '?'));
     if (!item || !m.getAttribute('src')) return;
     if (twin && m === audio) { console.warn('segundo plano: el sonido solo no pudo seguir'); return; }
     // un aviso sin error de verdad (p. ej. la imagen de espera del móvil): no es un fallo del vídeo
     if (!m.error) return;
+    diag('error del vídeo ' + (item.id || item.lid) + ': ' + m.error.code + ' ' + (m.error.message || ''));
     const code = m.error ? m.error.code : 0;
     console.warn('error del vídeo', code, m.error && m.error.message);
     if (item.src === 'local' && !compat && !item.remote) {
