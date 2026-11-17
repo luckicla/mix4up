@@ -834,9 +834,6 @@ html[data-nav] #tabs a.on::before { display: none; }
 .player.waiting:not(.started) .poster::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.08) 50%, transparent 70%); background-size: 250% 100%; animation: shimmer 1.4s linear infinite; }
 @keyframes posterzoom { from { transform: scale(1.08); filter: brightness(.7); } to { transform: scale(1); filter: brightness(.55); } }
 @keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }
-.player video { opacity: 0; transition: opacity .4s ease, transform .2s ease; }
-.player.started video { opacity: 1; }
-.player.audio video { opacity: 0; }
 .player .loading { border-color: rgba(255,255,255,.15); border-top-color: var(--acc); border-right-color: var(--acc); width: 48px; height: 48px; margin: -24px 0 0 -24px; border-width: 3.5px; }
 .player svg.morph { animation: morph .28s cubic-bezier(.3,1.5,.5,1); }
 @keyframes morph { from { transform: scale(.4) rotate(-90deg); opacity: 0; } }

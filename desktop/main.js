@@ -24,6 +24,8 @@ const UPDATES = process.env.MIX4UP_UPDATES || 'https://github.com/luckicla/mix4u
 const portableDir = process.env.PORTABLE_EXECUTABLE_DIR || '';
 const portable = !!portableDir;
 const TOKEN = crypto.randomBytes(16).toString('hex');
+// para entrar en Google: un Firefox (Google no le pide las «pistas» de Chrome que delatan a Electron)
+const LOGIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0';
 const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
 
 // lo de la ventana (su almacenamiento, la caché), dentro de la carpeta de datos de Mix4Up
@@ -180,12 +182,19 @@ function login() {
   if (loginWin) { loginWin.focus(); return Promise.resolve({ ok: false, msg: 'Ya hay una ventana de inicio de sesión abierta' }); }
   return new Promise(resolve => {
     const ses = session.fromPartition('persist:youtube');
-    ses.setUserAgent(CHROME_UA, 'es-ES,es');
+    ses.setUserAgent(LOGIN_UA, 'es-ES,es');
+    // fuera las cabeceras que dicen «soy Chromium/Electron»
+    ses.webRequest.onBeforeSendHeaders((d, cb) => {
+      const h = d.requestHeaders;
+      for (const k of Object.keys(h)) if (/^sec-ch-ua/i.test(k) || /^x-client-data$/i.test(k)) delete h[k];
+      h['User-Agent'] = LOGIN_UA;
+      cb({ requestHeaders: h });
+    });
     loginWin = new BrowserWindow({
       width: 520, height: 720, parent: win || undefined, modal: false, title: 'Conectar con YouTube · Mix4Up', icon: iconPath(), autoHideMenuBar: true,
-      webPreferences: { session: ses, contextIsolation: true, sandbox: true, spellcheck: false },
+      webPreferences: { session: ses, contextIsolation: true, sandbox: true, spellcheck: false, preload: path.join(__dirname, 'login-preload.js') },
     });
-    loginWin.webContents.setUserAgent(CHROME_UA);
+    loginWin.webContents.setUserAgent(LOGIN_UA);
     loginWin.webContents.setWindowOpenHandler(({ url }) => { loginWin.loadURL(url); return { action: 'deny' }; });
     const next = encodeURIComponent('https://www.youtube.com/signin?action_handle_signin=true&app=desktop&hl=es&next=%2F');
     loginWin.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&hl=es&passive=true&continue=' + next);

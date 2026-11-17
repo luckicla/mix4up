@@ -115,6 +115,9 @@ final class YtAccount {
         return b.toString();
     }
 
+    private static final Pattern MAXAGE = Pattern.compile("max-age=(-?\\d+)"), EXPIRES = Pattern.compile("(?i)expires=([^;]+)");
+    private static final Set<String> KEEP = new HashSet<>(java.util.Arrays.asList("SID", "HSID", "SSID", "APISID", "SAPISID", "LOGIN_INFO",
+            "__Secure-1PSID", "__Secure-3PSID", "__Secure-1PAPISID", "__Secure-3PAPISID"));
     /** Lo que YouTube cambia en la sesión, guardado. */
     static void absorb(HttpURLConnection c) {
         if (!connected()) return;
@@ -129,10 +132,27 @@ final class YtAccount {
                 int i = first.indexOf('=');
                 if (i <= 0) continue;
                 String name = first.substring(0, i).trim(), val = first.substring(i + 1).trim();
-                if (s.toLowerCase().contains("domain=") && !s.toLowerCase().contains("youtube.com")) continue;
+                String low = s.toLowerCase(java.util.Locale.ROOT);
+                if (low.contains("domain=") && !low.contains("youtube.com")) continue;
+                // ¿la borra? (caducada o Max-Age=0): fuera, en vez de guardar «EXPIRED» como si fuera
+                // su valor (eso estropeaba la sesión y YouTube dejaba de reconocer la cuenta)
+                long exp = System.currentTimeMillis() / 1000 + 180L * 86400;
+                Matcher ma = MAXAGE.matcher(low);
+                if (ma.find()) { try { exp = System.currentTimeMillis() / 1000 + Long.parseLong(ma.group(1)); } catch (NumberFormatException ignored) {} }
+                else {
+                    Matcher me = EXPIRES.matcher(s);
+                    if (me.find()) try { exp = new java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US).parse(me.group(1).trim().replace('-', ' ')).getTime() / 1000; } catch (Exception ignored) {}
+                }
+                boolean gone = exp <= System.currentTimeMillis() / 1000 || val.isEmpty() || val.equals("EXPIRED") || val.equals("deleted");
+                if (gone) {
+                    // las cookies que dicen quién eres no se tiran por un aviso suelto: solo si YouTube de verdad cierra la sesión
+                    if (KEEP.contains(name)) continue;
+                    if (cookies.removeIf(ck -> ck.name.equals(name))) changed = true;
+                    continue;
+                }
                 boolean found = false;
-                for (Cookie ck : cookies) if (ck.name.equals(name)) { if (!ck.value.equals(val)) { ck.value = val; changed = true; } found = true; }
-                if (!found) { Cookie ck = new Cookie(); ck.domain = ".youtube.com"; ck.name = name; ck.value = val; ck.expires = System.currentTimeMillis() / 1000 + 180L * 86400; cookies.add(ck); changed = true; }
+                for (Cookie ck : cookies) if (ck.name.equals(name)) { if (!ck.value.equals(val)) { ck.value = val; ck.expires = exp; changed = true; } found = true; }
+                if (!found) { Cookie ck = new Cookie(); ck.domain = ".youtube.com"; ck.name = name; ck.value = val; ck.expires = exp; cookies.add(ck); changed = true; }
             }
         }
         if (changed) save();

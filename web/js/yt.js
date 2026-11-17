@@ -40,6 +40,7 @@ const YT = (() => {
       throw new Error(msg || 'YouTube no contestó');
     }
     if (r && r.error) throw new Error(r.error.message || 'YouTube dio un error');
+    if (ep === 'browse' && connected()) grabMe(r);
     return r;
   }
 
@@ -466,25 +467,24 @@ const YT = (() => {
     await call('browse/edit_playlist', { playlistId: 'WL', actions: [on ? { addedVideoId: id, action: 'ACTION_ADD_VIDEO' } : { removedVideoId: id, action: 'ACTION_REMOVE_VIDEO_BY_VIDEO_ID' }] });
   }
 
-  /* ---------- tu perfil: nombre y foto de tu cuenta ---------- */
-  // (se guarda un rato para que la foto salga al momento al abrir la app)
-  let meP = null;
-  function me(force) {
-    const c = M4.store.get('me');
-    if (!connected() && !(acct && acct.connected)) return Promise.resolve(null);
-    if (c && !force && Date.now() - c.at < 6 * 3600e3) return Promise.resolve(c);
-    if (meP) return meP;
-    meP = call('account/account_menu', {}).then(r => {
-      const hd = find(r, 'activeAccountHeaderRenderer');
-      if (!hd) return c || null;
-      let photo = bestThumb(hd.accountPhoto && hd.accountPhoto.thumbnails);
-      photo = photo.replace(/=s\d+(-[^/]*)?$/, '=s176-c-k-c0x00ffffff-no-rj');
-      const v = { name: text(hd.accountName), handle: text(hd.channelHandle), photo, at: Date.now() };
+  /* ---------- tu perfil: tu foto de la cuenta ---------- */
+  // Sale de lo que YouTube ya manda con cada página (la barra de arriba de su web
+  // trae tu foto): sin pedir nada más a YouTube.
+  function grabMe(r) {
+    try {
+      const tb = find(r, 'topbarMenuButtonRenderer', 3000);
+      const th = tb && tb.avatar && tb.avatar.thumbnails;
+      if (!th || !th.length) return;
+      let photo = bestThumb(th).replace(/=s\d+(-[^/]*)?$/, '=s176-c-k-c0x00ffffff-no-rj');
+      const old = M4.store.get('me');
+      if (old && old.photo === photo) return;
+      const label = tb.accessibility && tb.accessibility.accessibilityData && tb.accessibility.accessibilityData.label || '';
+      const v = { name: (old && old.name) || '', handle: (old && old.handle) || '', photo, label, at: Date.now() };
       M4.store.set('me', v);
-      return v;
-    }).catch(e => { console.warn('perfil:', e.message); return c || null; }).finally(() => { meP = null; });
-    return meP;
+      M4.emit('me', v);
+    } catch {}
   }
+  function me() { return Promise.resolve(connected() || (acct && acct.connected) ? M4.store.get('me') : null); }
   const meCached = () => { const c = M4.store.get('me'); return c && c.photo ? c : null; };
   const forgetMe = () => M4.store.set('me', null);
 

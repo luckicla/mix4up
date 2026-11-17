@@ -22,7 +22,7 @@
     "productName": "Mix4Up",
     "executableName": "Mix4Up",
     "directories": { "buildResources": "build", "output": "dist" },
-    "files": ["main.js", "preload.js", "splash.html", "package.json"],
+    "files": ["main.js", "preload.js", "login-preload.js", "splash.html", "package.json"],
     "extraResources": [
       { "from": "bin", "to": "core", "filter": ["mix4up-core.exe"] },
       { "from": "build/icon.ico", "to": "icon.ico" }

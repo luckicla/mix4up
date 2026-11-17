@@ -120,9 +120,8 @@ const App = (() => {
     b.title = c.connected ? 'Cuenta de YouTube conectada' : 'Conectar con YouTube';
     if (!c.connected) { paintFace(null); return; }
     paintFace(YT.meCached());
-    const me = await YT.me();
-    if (me) { paintFace(me); M4.emit('me', me); }
   }
+  M4.on('me', me => { if (YT.connected()) paintFace(me); });
   $('#btnAccount').onclick = async () => {
     const c = await YT.getCfg();
     const me = YT.meCached();
@@ -341,7 +340,10 @@ const App = (() => {
     $('#verLabel').textContent = info.version ? 'Versión ' + info.version.split('.').slice(0, 3).join('.') : '';
     await YT.account();
     if (!location.hash || location.hash === '#/') Views.preloadHome();
-    YT.warm();
+    // la cuenta sigue guardada pero YouTube ya no la reconoce: avisar (si no, el inicio sale genérico sin saber por qué)
+    YT.warm().then(c => {
+      if (c && c.connected && c.ok && c.loggedIn === false) toast('YouTube ha cerrado tu sesión en este aparato. Vuelve a conectar tu cuenta para ver tus recomendaciones.', { action: 'Conectar', fn: SettingsPage.connect, ms: 12000 });
+    }).catch(() => {});
     paintAccount();
     Views.sideSubs();
     Sync.start();
