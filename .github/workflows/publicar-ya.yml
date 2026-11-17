@@ -1,0 +1,80 @@
+# Publicar a mano lo compilado en una ejecución anterior (sin volver a compilar)
+name: Publicar una compilación
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: Número de la ejecución (run id) con los archivos
+        required: true
+      v:
+        description: Versión (1.x.y)
+        required: true
+      n:
+        description: Número de compilación (run number)
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop
+          path: pc
+          run-id: ${{ inputs.run }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: movil
+          run-id: ${{ inputs.run }}
+          github-token: ${{ github.token }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mix4up-pc-latest
+          name: Mix4Up para PC (última)
+          prerelease: true
+          make_latest: false
+          body: Última versión de Mix4Up para Windows. Se actualiza sola.
+          files: |
+            pc/Mix4Up-Instalador.exe
+            pc/Mix4Up-Instalador.exe.blockmap
+            pc/Mix4Up-Portable.exe
+            pc/latest.yml
+            pc/desktop.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mix4up-android-latest
+          name: Mix4Up para Android (última)
+          prerelease: true
+          make_latest: false
+          body: Última versión de Mix4Up para Android. Se actualiza sola.
+          files: |
+            movil/Mix4Up.apk
+            movil/version.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.v }}
+          name: Mix4Up v${{ inputs.v }}
+          make_latest: true
+          files: |
+            pc/Mix4Up-Instalador.exe
+            pc/Mix4Up-Portable.exe
+            movil/Mix4Up.apk
+          body: |
+            ## Mix4Up v${{ inputs.v }} — primera versión
+
+            Tus vídeos y YouTube **sin Shorts y sin anuncios**, con tus recomendaciones, para Windows y Android.
+
+            - **Windows**: `Mix4Up-Instalador.exe` (se instala y se actualiza sola) o `Mix4Up-Portable.exe` (sin instalar, los datos van junto al .exe).
+            - **Android**: `Mix4Up.apk`. Se actualiza sola.
+            - Conecta tu cuenta de YouTube con el botón «Conectar con YouTube» para ver tu inicio, suscripciones, historial y listas.
+
+            Probada en un Windows limpio (instalar, ver tus vídeos, buscar sin Shorts, actualizarse sola la instalada y la portable) y en el emulador de Android (buscar sin Shorts, todas las páginas, actualizarse sola sin preguntar conservando los datos).
+
+            Windows o Android pueden avisar de que no es seguro porque no está firmado con un certificado de pago ni viene de una tienda: *Más información → Ejecutar de todas formas* / *Instalar de todas formas*.
