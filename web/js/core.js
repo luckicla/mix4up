@@ -37,7 +37,7 @@ const M4 = (() => {
     theme: 'dark', accent: '#ff2e88', accent2: '#c8ff00', radius: 12, density: 'normal', font: 'system', cardStyle: 'round',
     autoplay: true, quality: 'auto', qualityCap: ANDROID ? 720 : 1080, speed: 1, subs: false, subLang: 'es', subSize: 100,
     strictShorts: true, volume: 1, muted: false, autoUpdate: true, theater: false, resume: true, markWatched: true,
-    syncLook: false, gestures: true, homeSource: 'auto', sleepAction: 'pause', bgPlay: true, lookVer: 0,
+    syncLook: false, gestures: true, haptics: true, navStyle: 'float', navAlpha: 72, homeSource: 'auto', sleepAction: 'pause', bgPlay: true, lookVer: 0,
   };
   let settings = { ...DEFAULTS }, saveT = 0;
   const Settings = {
@@ -72,16 +72,28 @@ const M4 = (() => {
   function applyLook() {
     const s = settings, d = document.documentElement;
     d.dataset.theme = s.theme;
+    d.dataset.nav = s.navStyle || 'float';
     const vars = {
       '--acc': s.accent, '--acc2': s.accent2, '--accfg': contrastText(s.accent),
-      '--r': (+s.radius || 0) + 'px', '--cardw': (CARDW[s.density] || 300) + 'px', '--font': FONTS[s.font] || FONTS.system,
+      '--r': (+s.radius || 0) + 'px', '--navA': Math.max(20, Math.min(100, +s.navAlpha || 72)) + '%', '--cardw': (CARDW[s.density] || 300) + 'px', '--font': FONTS[s.font] || FONTS.system,
     };
     const css = Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(';');
     d.setAttribute('style', css);
-    try { localStorage.setItem('m4.look', JSON.stringify({ css, theme: s.theme })); } catch {}
+    try { localStorage.setItem('m4.look', JSON.stringify({ css, theme: s.theme, nav: s.navStyle || 'float' })); } catch {}
     if (ANDROID) try { Mix4UpAndroid.setBars(getComputedStyle(d).getPropertyValue('--bg').trim() || '#0f0f13', s.theme === 'light'); } catch {}
   }
-  on('settings', p => { if (['theme', 'accent', 'accent2', 'radius', 'density', 'font'].some(k => k in p)) applyLook(); });
+  on('settings', p => { if (['theme', 'accent', 'accent2', 'radius', 'density', 'font', 'navStyle', 'navAlpha'].some(k => k in p)) applyLook(); });
+
+  /* ---------- vibración (en el móvil) ---------- */
+  // tap: un toque corto · tick: muy suave (al deslizar) · long: pulsación larga · confirm: hecho · reject: no se puede
+  let lastHap = 0;
+  function haptic(kind = 'tap') {
+    if (!ANDROID || settings.haptics === false) return;
+    const now = Date.now();
+    if (kind === 'tick' && now - lastHap < 40) return;
+    lastHap = now;
+    try { window.Mix4UpAndroid.haptic(kind); } catch {}
+  }
 
   /* ---------- crear elementos ---------- */
   function h(tag, attrs, ...kids) {
@@ -190,6 +202,7 @@ const M4 = (() => {
     if (innerWidth <= 760) {
       // en el móvil, como YouTube: una hoja que sube desde abajo
       pop.classList.add('sheet-pop');
+      haptic('long');
       const scrim = h('div.sheet-scrim', { onclick: () => closePop() });
       document.body.insertBefore(scrim, pop);
       popClose = pushClose(closePop);
@@ -294,7 +307,7 @@ const M4 = (() => {
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
   return {
-    ANDROID, DESKTOP, $, $$, on, emit, api, Settings, h, icon, esc, dur, parseDur, views, ago, toast, modal, confirm, prompt,
+    ANDROID, DESKTOP, $, $$, on, emit, haptic, api, Settings, h, icon, esc, dur, parseDur, views, ago, toast, modal, confirm, prompt,
     popMenu, closePop, sheet, closeTop, pushClose, route, go, render, parseHash, failView, errorBox, dev, deviceName, store, copy, debounce, applyLook,
   };
 })();

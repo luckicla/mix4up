@@ -90,6 +90,8 @@ jobs:
           pip install -q playwright yt-dlp
           sh tools/prueba/videos.sh "$HOME/Videos"
       - name: Probar (Linux + Chrome, YouTube de verdad)
+        env:
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
         run: |
           chmod +x mix4up-linux
           MIX4UP_VIDEOS="$HOME/Videos" python tools/prueba/web.py ./mix4up-linux "$HOME/Videos" out

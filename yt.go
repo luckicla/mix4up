@@ -54,6 +54,15 @@ var ytHTTP = &http.Client{Timeout: 20 * time.Second}
 func newYT(s *server) *ytAccount {
 	a := &ytAccount{s: s}
 	a.load()
+	ytVisitor = func() string {
+		a.cfgMu.Lock()
+		defer a.cfgMu.Unlock()
+		if a.cfgVal != nil {
+			v, _ := a.cfgVal["visitorData"].(string)
+			return v
+		}
+		return ""
+	}
 	ytCookieFile = func() string {
 		if a.connected() {
 			return a.file()

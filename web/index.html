@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="css/style.css">
 <script>
   // el aspecto guardado, antes de pintar nada (sin parpadeo)
-  try { const l = JSON.parse(localStorage.getItem('m4.look') || 'null'); if (l) document.documentElement.setAttribute('style', l.css), document.documentElement.dataset.theme = l.theme; } catch (e) {}
+  try { const l = JSON.parse(localStorage.getItem('m4.look') || 'null'); if (l) document.documentElement.setAttribute('style', l.css), document.documentElement.dataset.theme = l.theme, document.documentElement.dataset.nav = l.nav || 'float'; } catch (e) {}
 </script>
 </head>
 <body>

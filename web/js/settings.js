@@ -115,6 +115,11 @@ const SettingsPage = (() => {
     paintAcc();
     const acc1 = h('input', { type: 'color', value: Settings.get().accent, oninput: e => { Settings.set({ accent: e.target.value, lookVer: Date.now() }); paintAcc(); } });
     const acc2 = h('input', { type: 'color', value: Settings.get().accent2, oninput: e => { Settings.set({ accent2: e.target.value, lookVer: Date.now() }); paintThemes(); } });
+    const NAVS = [['float', 'Flotante', 'Semitransparente, flotando'], ['floatSolid', 'Flotante sólido', 'Flotando, sin transparencia'], ['mini', 'Mini', 'Solo iconos, pequeño y centrado'], ['solid', 'Clásico', 'Pegado abajo, como YouTube']];
+    const navBox = h('div.navopts');
+    const paintNav = () => navBox.replaceChildren(...NAVS.map(([id, name, sub]) => h('button' + (Settings.get().navStyle === id ? '.sel' : ''), { onclick: () => { Settings.set({ navStyle: id, lookVer: Date.now() }); M4.haptic('tick'); paintNav(); } },
+      h('i.nprev.n-' + id, null, h('b'), h('b'), h('b'), h('b')), h('span', null, name), h('small', null, sub))));
+    paintNav();
     const rad = h('input', { type: 'range', min: 0, max: 24, value: Settings.get().radius, oninput: e => Settings.set({ radius: +e.target.value, lookVer: Date.now() }) });
     page.append(h('section', null, h('h2', null, icon('palette'), 'Aspecto'),
       h('div.set', null, h('span', null, 'Estilos listos', h('small', null, 'Un toque y cambia todo; luego lo retocas a tu gusto.')),
@@ -125,6 +130,8 @@ const SettingsPage = (() => {
       h('div.set', null, h('span', null, 'Esquinas', h('small', null, 'De rectas a muy redondeadas.')), rad),
       sel('density', 'Tamaño de las miniaturas', 'Cuántos vídeos caben por fila.', [['compact', 'Pequeñas (caben más)'], ['normal', 'Normales'], ['big', 'Grandes']]),
       sel('font', 'Letra', '', [['system', 'La del sistema'], ['rounded', 'Redondeada'], ['narrow', 'Estrecha'], ['serif', 'Con serifa'], ['mono', 'Máquina de escribir']]),
+      h('div.set', null, h('span', null, 'Menú de abajo (móvil)', h('small', null, 'Cómo quieres la barra de Inicio, Suscripciones, Mis vídeos y Tú.')), navBox),
+      h('div.set', null, h('span', null, 'Transparencia del menú', h('small', null, 'Cuánto se ve lo de detrás (en el menú flotante).')), h('input', { type: 'range', min: 25, max: 100, value: Settings.get().navAlpha, oninput: e => Settings.set({ navAlpha: +e.target.value, lookVer: Date.now() }) })),
       sw('syncLook', 'Mismo aspecto en el móvil y el PC', 'Al sincronizar, el aspecto que cambies en uno pasa al otro.'),
       h('div.set', null, h('span', null, 'Volver al aspecto de siempre'), h('button.btn.ghost', { onclick: () => { Settings.set({ ...PRESETS[0][1], density: 'normal', lookVer: Date.now() }); M4.render(); } }, 'Restablecer'))));
 
@@ -137,7 +144,8 @@ const SettingsPage = (() => {
       sel('speed', 'Velocidad', '', [[0.75, '0,75×'], [1, 'Normal'], [1.25, '1,25×'], [1.5, '1,5×'], [2, '2×']]),
       sw('subs', 'Subtítulos activados', 'Si el vídeo los tiene.'),
       sel('subLang', 'Idioma de los subtítulos', '', [['es', 'Español'], ['en', 'Inglés'], ['ca', 'Catalán'], ['fr', 'Francés'], ['pt', 'Portugués'], ['it', 'Italiano'], ['de', 'Alemán']]),
-      ANDROID ? sw('gestures', 'Gestos en el vídeo', 'Dos toques a un lado: ±10 s. Deslizar a la izquierda: brillo; a la derecha: volumen.') : '',
+      ANDROID ? sw('gestures', 'Gestos en el vídeo', 'Dos toques a un lado: ±10 s. Mantener pulsado: a 2×. Deslizar a los lados: adelantar o atrasar. Hacia abajo: minimizar; hacia arriba: pantalla completa. En pantalla completa, arriba/abajo a la izquierda: brillo; a la derecha: volumen.') : '',
+      ANDROID ? sw('haptics', 'Vibración', 'Una vibración suave al tocar, al dar a me gusta, al mantener pulsado…') : '',
       ANDROID ? sw('bgPlay', 'Seguir oyéndolo con la pantalla apagada', 'El sonido sigue en segundo plano, con controles en la notificación.') : '',
       sel('sleepAction', 'Al acabar el temporizador para dormir', '', [['pause', 'Parar el vídeo'], ['close', 'Parar y cerrar Mix4Up'], ...(DESKTOP ? [['shutdown', 'Parar y apagar el PC']] : [])])));
 

@@ -598,3 +598,51 @@ html.tb-full #top { display: none; }
 .subrow a span { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subrow img, .subrow .ph0 { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: var(--bg3); display: grid; place-items: center; }
 @media (max-width: 760px) { .subrow { padding: 10px 12px 14px; border-bottom: 1px solid var(--line); margin-bottom: 8px; } }
+
+/* ---------- la barra de abajo del móvil: a elegir en Ajustes ---------- */
+@media (max-width: 760px) {
+  /* flotante y semitransparente (por defecto) */
+  html[data-nav="float"] #tabs, html[data-nav="floatSolid"] #tabs, html[data-nav="mini"] #tabs {
+    left: 14px; right: 14px; bottom: calc(10px + env(safe-area-inset-bottom)); height: 62px; padding: 0 6px; border-radius: 24px;
+    border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent); box-shadow: 0 10px 34px rgba(0,0,0,.38);
+    background: color-mix(in srgb, var(--bg2) var(--navA), transparent);
+  }
+  html[data-nav="floatSolid"] #tabs { background: var(--bg2); }
+  html[data-nav="mini"] #tabs { left: 50%; right: auto; transform: translateX(-50%); width: min(300px, calc(100vw - 40px)); height: 54px; border-radius: 27px; }
+  html[data-nav="mini"] #tabs span { display: none; }
+  html[data-nav="float"] #tabs a, html[data-nav="floatSolid"] #tabs a, html[data-nav="mini"] #tabs a { position: relative; color: var(--fg2); }
+  html[data-nav="float"] #tabs a.on::before, html[data-nav="floatSolid"] #tabs a.on::before, html[data-nav="mini"] #tabs a.on::before {
+    content: ""; position: absolute; top: 7px; width: 56px; height: 30px; border-radius: 15px; background: color-mix(in srgb, var(--acc) 22%, transparent); z-index: -1;
+  }
+  html[data-nav="mini"] #tabs a.on::before { top: 9px; height: 36px; width: 52px; border-radius: 18px; }
+  html[data-nav="float"] #tabs a.on, html[data-nav="floatSolid"] #tabs a.on, html[data-nav="mini"] #tabs a.on { color: var(--fg); }
+  html[data-nav="float"] #tabs a svg, html[data-nav="floatSolid"] #tabs a svg { margin-top: 2px; }
+  /* el contenido pasa por debajo (se ve a través) */
+  html[data-nav="float"] #main, html[data-nav="floatSolid"] #main, html[data-nav="mini"] #main { bottom: 0; }
+  html[data-nav="float"] #view, html[data-nav="floatSolid"] #view, html[data-nav="mini"] #view { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+  html[data-nav="float"] #mini, html[data-nav="floatSolid"] #mini, html[data-nav="mini"] #mini {
+    left: 10px; right: 10px; bottom: calc(80px + env(safe-area-inset-bottom)); border-radius: 14px; overflow: hidden;
+    background: color-mix(in srgb, var(--bg2) calc(var(--navA) + 15%), transparent); border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent); box-shadow: 0 8px 26px rgba(0,0,0,.35);
+  }
+  html[data-nav="mini"] #mini { bottom: calc(74px + env(safe-area-inset-bottom)); }
+  html[data-nav="float"] #toasts, html[data-nav="floatSolid"] #toasts, html[data-nav="mini"] #toasts { bottom: calc(84px + env(safe-area-inset-bottom)); }
+  /* clásica: pegada abajo, como YouTube */
+  html[data-nav="solid"] #tabs { background: var(--bg); }
+  /* tirar hacia abajo para refrescar */
+  .ptr { position: fixed; left: 50%; top: calc(var(--top) + env(safe-area-inset-top) + 8px); width: 38px; height: 38px; margin-left: -19px; border-radius: 50%; background: var(--bg2); box-shadow: var(--shadow); display: grid; place-items: center; z-index: 20; transform: translateY(-60px) scale(.6); opacity: 0; transition: opacity .15s; }
+  .ptr svg { width: 22px; height: 22px; color: var(--acc); }
+  .ptr.go svg { animation: rot .8s linear infinite; }
+}
+.player .hud.scrub { top: 40%; font-size: 18px; }
+.player .x2 { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.6); padding: 4px 12px; border-radius: 14px; font-weight: 700; display: none; }
+.player.speedup .x2 { display: block; }
+.navopts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; width: 100%; }
+.navopts button { border: 2px solid var(--line); border-radius: 14px; padding: 10px; text-align: left; display: flex; flex-direction: column; gap: 4px; background: var(--bg); }
+.navopts button.sel { border-color: var(--acc); }
+.navopts small { color: var(--fg2); font-size: 11px; }
+.nprev { height: 46px; border-radius: 10px; background: linear-gradient(160deg, var(--acc), var(--acc2)); position: relative; display: block; margin-bottom: 4px; overflow: hidden; }
+.nprev b { display: none; }
+.nprev::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 6px; height: 14px; border-radius: 7px; background: color-mix(in srgb, var(--bg2) 70%, transparent); border: 1px solid rgba(255,255,255,.25); }
+.nprev.n-floatSolid::after { background: var(--bg2); }
+.nprev.n-mini::after { left: 30%; right: 30%; }
+.nprev.n-solid::after { left: 0; right: 0; bottom: 0; border-radius: 0; height: 13px; background: var(--bg); border: 0; }

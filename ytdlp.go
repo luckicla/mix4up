@@ -109,6 +109,9 @@ var ytdl = &ytResolver{cache: map[string]*ytInfo{}, inflight: map[string]*ytCall
 // las cookies de la cuenta conectada (las pone yt.go)
 var ytCookieFile = func() string { return "" }
 
+// el «visitante» de la web de YouTube (lo pone yt.go)
+var ytVisitor = func() string { return "" }
+
 var dlClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ResponseHeaderTimeout: 30 * time.Second}}
 var ytStreamClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ResponseHeaderTimeout: 20 * time.Second, MaxIdleConnsPerHost: 8}}
 
@@ -404,7 +407,20 @@ func (y *ytResolver) get(id string, fresh bool) (*ytInfo, error) {
 	y.inflight[id] = c
 	y.mu.Unlock()
 
-	c.info, c.err = y.resolve(id)
+	// primero el camino rápido (ytfast.go); si no, yt-dlp
+	if !fresh && !fastOff() && os.Getenv("MIX4UP_YTDLP") == "" {
+		if in, err := fastInfo(id, ytVisitor()); err == nil {
+			in.client = -1
+			c.info = in
+			fastResult(true)
+		} else {
+			logf("yt: %s: %v → yt-dlp", id, err)
+			fastResult(false)
+		}
+	}
+	if c.info == nil {
+		c.info, c.err = y.resolve(id)
+	}
 	if c.err != nil && ytDownloadTools && ytdlpPath() != "" && clientMayHelp(c.err) {
 		// quizá YouTube cambió algo y ya hay un yt-dlp nuevo
 		y.toolsMu.Lock()

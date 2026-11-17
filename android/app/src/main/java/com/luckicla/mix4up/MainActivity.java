@@ -523,5 +523,27 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void diag(String what) { Diag.log("página: " + what); }
+        // vibración: las de Android (finas y cortas, como las del teclado del sistema)
+        @JavascriptInterface public void haptic(String kind) {
+            try {
+                android.os.Vibrator v = Build.VERSION.SDK_INT >= 31
+                        ? ((android.os.VibratorManager) app.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)).getDefaultVibrator()
+                        : (android.os.Vibrator) app.getSystemService(Context.VIBRATOR_SERVICE);
+                if (v == null || !v.hasVibrator()) return;
+                if (Build.VERSION.SDK_INT >= 29) {
+                    int e;
+                    switch (kind) {
+                        case "tick": e = android.os.VibrationEffect.EFFECT_TICK; break;
+                        case "long": e = android.os.VibrationEffect.EFFECT_HEAVY_CLICK; break;
+                        case "confirm": e = android.os.VibrationEffect.EFFECT_DOUBLE_CLICK; break;
+                        default: e = android.os.VibrationEffect.EFFECT_CLICK;
+                    }
+                    v.vibrate(android.os.VibrationEffect.createPredefined(e));
+                } else if (Build.VERSION.SDK_INT >= 26) {
+                    long ms = "tick".equals(kind) ? 6 : "long".equals(kind) ? 28 : "confirm".equals(kind) ? 18 : 12;
+                    v.vibrate(android.os.VibrationEffect.createOneShot(ms, "tick".equals(kind) ? 60 : 160));
+                } else v.vibrate(12);
+            } catch (Exception ignored) {}
+        }
     }
 }

@@ -22,6 +22,13 @@ try:
         p.on('console', lambda m: checks.say('[consola]', m.type, m.text[:300]) if m.type == 'error' else None)
         p.goto('http://127.0.0.1:47823/')
         ev = lambda js: p.evaluate(js)
+        # (si en GitHub hay un secreto YT_COOKIES con un cookies.txt de una cuenta de pruebas, se prueba también con cuenta)
+        if os.environ.get('YT_COOKIES'):
+            p.wait_for_function('window.M4ready === true', timeout=60000)
+            ck = os.environ['YT_COOKIES']
+            r = p.evaluate('t => fetch("/api/yt/cookies", {method: "POST", body: t}).then(r => r.json())', ck)
+            checks.say('cuenta de pruebas conectada:', r)
+            p.reload()
         if checks.ready(ev):
             checks.local_video(ev)
             p.screenshot(path=os.path.join(out, 'mis-videos.png'))

@@ -143,6 +143,53 @@ const App = (() => {
   }, { passive: true });
   M4.on('route', () => document.body.classList.remove('top-hidden'));
 
+  /* ---------- gestos y vibración del móvil ---------- */
+  // tocar la pestaña en la que ya estás: arriba del todo (y otra vez: refrescar)
+  $$('#tabs a').forEach(a => a.addEventListener('click', e => {
+    M4.haptic('tap');
+    if (a.classList.contains('on')) {
+      e.preventDefault();
+      if ($('#main').scrollTop > 10) $('#main').scrollTo({ top: 0, behavior: 'smooth' }); else M4.render();
+    }
+  }));
+  // mantener pulsado un vídeo: su menú
+  let lpT = 0, lpX = 0, lpY = 0, lpFired = false;
+  document.addEventListener('touchstart', e => {
+    const c = e.target.closest('#view .card, #mini');
+    lpFired = false;
+    if (!c || c.id === 'mini' || e.target.closest('.player')) return;
+    const t = e.touches[0]; lpX = t.clientX; lpY = t.clientY;
+    clearTimeout(lpT);
+    lpT = setTimeout(() => { const m = c.querySelector('.more'); if (m) { lpFired = true; m.click(); } }, 520);
+  }, { passive: true });
+  document.addEventListener('touchmove', e => { const t = e.touches[0]; if (Math.abs(t.clientX - lpX) > 10 || Math.abs(t.clientY - lpY) > 10) clearTimeout(lpT); }, { passive: true });
+  document.addEventListener('touchend', () => clearTimeout(lpT), { passive: true });
+  document.addEventListener('click', e => { if (lpFired && e.target.closest('#view .card')) { e.preventDefault(); e.stopPropagation(); lpFired = false; } }, true);
+  document.addEventListener('contextmenu', e => { if (e.target.closest('#view .card')) e.preventDefault(); });
+  // tirar hacia abajo para refrescar (inicio, suscripciones, mis vídeos…)
+  const ptr = h('div.ptr', null, icon('refresh'));
+  document.body.append(ptr);
+  let pY = null, pD = 0;
+  const main = $('#main');
+  main.addEventListener('touchstart', e => { if (main.scrollTop <= 0 && !document.body.classList.contains('watching') && !e.target.closest('.chips,.hscroll,.subrow')) pY = e.touches[0].clientY; else pY = null; pD = 0; }, { passive: true });
+  main.addEventListener('touchmove', e => {
+    if (pY == null) return;
+    pD = Math.max(0, e.touches[0].clientY - pY);
+    if (main.scrollTop > 0) { pY = null; return; }
+    const k = Math.min(1, pD / 110);
+    ptr.style.opacity = k; ptr.style.transform = `translateY(${pD * 0.5 - 50}px) rotate(${pD * 2}deg) scale(${0.6 + k * 0.4})`;
+    if (pD > 110 && !ptr.dataset.armed) { ptr.dataset.armed = '1'; M4.haptic('tick'); }
+  }, { passive: true });
+  main.addEventListener('touchend', () => {
+    if (pY == null) return;
+    pY = null;
+    if (pD > 110) {
+      ptr.classList.add('go'); M4.haptic('confirm');
+      Promise.resolve(M4.render()).finally(() => setTimeout(() => { ptr.classList.remove('go'); ptr.style.opacity = 0; ptr.style.transform = ''; }, 400));
+    } else { ptr.style.opacity = 0; ptr.style.transform = ''; }
+    delete ptr.dataset.armed;
+  }, { passive: true });
+
   /* ---------- «atrás» (botón del móvil) ---------- */
   // devuelve true si se ha encargado; false: la app se va al fondo
   window.M4back = () => {

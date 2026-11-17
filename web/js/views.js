@@ -177,6 +177,7 @@ const Views = (() => {
   function hideItem(it, anchor) {
     const key = 'yt:' + it.id;
     Journal.add('hide', key, 'add', Journal.meta(it));
+    M4.haptic('confirm');
     const c = anchor.closest('.card');
     if (c) c.style.display = 'none';
     toast('Vídeo oculto', { action: 'Deshacer', fn: () => { Journal.add('hide', key, 'del'); if (c) c.style.display = ''; } });
@@ -184,6 +185,7 @@ const Views = (() => {
   async function toggleLater(it) {
     const key = it.key || 'yt:' + it.id;
     const on = Journal.toggle('wl', key, Journal.meta(it));
+    M4.haptic('confirm');
     toast(on ? 'Guardado en Ver más tarde' : 'Quitado de Ver más tarde');
     if (YT.connected() && it.id) YT.watchLater(it.id, on).catch(e => console.warn('ver más tarde en YouTube:', e.message));
   }
@@ -289,7 +291,7 @@ const Views = (() => {
       all.onclick = () => { set(all); start(YT.home()); };
       chipsRow.replaceChildren(all, ...list.filter(c => !/^todo|^all$/i.test(c.label)).map(c => {
         const b = h('button.chip', null, c.label);
-        b.onclick = () => { set(b); $('#main').scrollTop = 0; start(YT.chipFeed(c.token)); };
+        b.onclick = () => { M4.haptic('tick'); set(b); $('#main').scrollTop = 0; start(YT.chipFeed(c.token)); };
         return b;
       }));
     }
@@ -603,6 +605,7 @@ const Views = (() => {
     const key = Player.keyOf(it);
     const likeBtn = h('button.btn' + (Journal.isOn('like', key) ? '.on' : ''), { onclick: async () => {
       const on = Journal.toggle('like', key, Journal.meta(Player.item || it));
+      M4.haptic(on ? 'confirm' : 'tap');
       likeBtn.classList.toggle('on', on);
       if (YT.connected() && it.src === 'yt') YT.like(it.id, on).catch(e => toast('YouTube no aceptó el me gusta: ' + e.message));
     } }, icon('like'), 'Me gusta');
@@ -658,6 +661,7 @@ const Views = (() => {
     const subbed = { v: w.subscribed || Journal.isOn('sub', w.chId) };
     const subBtn = h('button.btn' + (subbed.v ? '' : '.fg'), { onclick: async () => {
       subbed.v = !subbed.v;
+      M4.haptic(subbed.v ? 'confirm' : 'tap');
       subBtn.textContent = subbed.v ? 'Suscrito' : 'Suscribirse'; subBtn.className = 'btn ' + (subbed.v ? '' : 'fg');
       Journal.add('sub', w.chId, subbed.v ? 'add' : 'del', { n: w.channel, a: w.ava });
       if (YT.connected()) YT.subscribe(w.chId, subbed.v).catch(e => toast('YouTube no aceptó el cambio: ' + e.message));
