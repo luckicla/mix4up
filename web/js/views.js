@@ -17,7 +17,7 @@ const Views = (() => {
   function localItem(v) {
     const m = v.file.match(ytIdRe);
     return { type: 'video', src: 'local', lid: v.id, key: m ? 'yt:' + m[1] : v.key, title: v.title.replace(/\s*\[[A-Za-z0-9_-]{11}\]$/, ''), channel: v.folder,
-      thumb: v.thumb ? '/thumb/' + v.id : '', dur: v.dur, durText: v.dur ? dur(v.dur) : '', native: v.native, published: ago(v.mtime), size: v.size, file: v.file, _v: v };
+      thumb: '/thumb/' + v.id + (v.thumb ? '' : '?n=' + v.mtime), dur: v.dur, durText: v.dur ? dur(v.dur) : '', native: v.native, published: ago(v.mtime), size: v.size, file: v.file, _v: v };
   }
 
   // miniaturas de tus vídeos: un fotograma, sacado aquí mismo y guardado en Mix4Up
@@ -68,13 +68,17 @@ const Views = (() => {
     const key = it.key || (it.src === 'local' ? it.key : 'yt:' + it.id);
     const w = Journal.watched(key);
     const href = watchHref(it, opts.list);
-    const img = h('img', { alt: '', loading: 'lazy', src: it.thumb || '', hidden: !it.thumb });
-    img.onerror = () => { img.hidden = true; };
+    const img = h('img', { alt: '', loading: 'lazy', decoding: 'async', src: it.thumb || '', hidden: !it.thumb });
+    img.onerror = () => {
+      img.hidden = true;
+      if (!img.nextSibling || !img.nextSibling.classList || !img.nextSibling.classList.contains('ph')) img.after(h('div.ph', null, icon('film')));
+      // sin miniatura todavía: un fotograma, sacado aquí mismo
+      if (it.src === 'local' && it.native !== false && !it.remote) wantThumb(it, img);
+    };
     const th = h('a.thumb', { href }, img, !it.thumb ? h('div.ph', null, icon('film')) : '',
       it.live ? h('span.dur.live', null, 'EN DIRECTO') : it.durText || it.dur ? h('span.dur', null, it.durText || dur(it.dur)) : '',
       w ? h('div.prog', { style: { width: Math.max(4, w * 100) + '%' } }) : '',
       it.src === 'local' && !it.native ? h('span.badge', null, (it._v && it._v.ext || '').toUpperCase()) : '');
-    if (it.src === 'local' && !it.thumb && it.native !== false && !it.remote) wantThumb(it, img);
     const chLink = it.chId ? h('a', { href: '#/channel/' + it.chId, onclick: e => e.stopPropagation() }, it.channel) : h('span', null, it.channel || '');
     const subline = [it.views, it.published].filter(Boolean).join(' · ');
     const more = h('button.ib.more', { 'aria-label': 'Más opciones', onclick: e => { e.preventDefault(); e.stopPropagation(); itemMenu(it, more, opts); } }, icon('more'));
@@ -82,7 +86,7 @@ const Views = (() => {
       th,
       h('div.meta', null,
         it.ava && !opts.noAva ? h('a', { href: it.chId ? '#/channel/' + it.chId : href }, h('img.ava', { src: it.ava, alt: '', loading: 'lazy' })) : '',
-        h('div.t', null, h('a', { href }, h('h3', { title: it.title }, it.title)), h('div.sub', null, chLink, subline ? h('div', null, subline) : ''),
+        h('div.t', null, h('a', { href }, h('h3', { title: it.title }, it.title)), h('div.sub', null, chLink, subline ? h('span.sl', null, subline) : ''),
           it.desc && opts.desc ? h('div.desc', null, it.desc) : '')),
       more);
     if (it.src === 'yt' && it.id) {
@@ -119,6 +123,7 @@ const Views = (() => {
         const items = await f.more();
         if (!g.isConnected) return;
         for (const it of items) g.append(card(it, opts));
+        if (!count && opts.onFirst) opts.onFirst();
         count += items.length;
         if (f.done || !items.length) {
           sentinel.replaceChildren(count ? h('span.muted', null, opts.endText || '') : opts.empty ? opts.empty() : h('div.notice', null, h('h2', null, 'Nada por aquí'), h('p', null, opts.emptyText || 'No hay vídeos que enseñar.')));
@@ -246,25 +251,60 @@ const Views = (() => {
   const head = (title, ...right) => h('div.pagehead', null, h('h1', null, title), ...right);
 
   /* ---------- inicio ---------- */
-  route(/^\/$/, async () => {
-    const cfg = await YT.getCfg();
-    await loadLocal().catch(() => {});
+  route(/^\/$/, async ({ alive }) => {
+    const acct = await YT.account();
+    YT.warm();
+    loadLocal().catch(() => {});
     const box = setView('');
-    if (!cfg.connected) {
+    const connected = YT.connected();
+    const chipsRow = h('div.chips', { hidden: true });
+    box.append(chipsRow);
+    if (!connected) {
       box.append(h('div.banner', null, icon('user'), h('p', null, h('b', null, 'Conecta tu cuenta de YouTube'), h('br'), h('span.muted', null, 'Y aquí verás lo mismo que te recomienda YouTube, sin un solo Short. Mientras tanto, te enseño cosas parecidas a lo que ves.')),
-        h('button.btn.acc', { onclick: () => SettingsPage.connect() }, 'Conectar con YouTube')));
+        h('button.btn.acc', { onclick: () => SettingsPage.connect() }, 'Conectar')));
     }
-    const refresh = h('button.btn', { onclick: () => M4.render() }, icon('refresh'), 'Refrescar');
-    box.append(head(cfg.connected ? 'Recomendado para ti' : 'Inicio', refresh));
     const cont = continueItems();
     if (cont.length) box.append(h('section.shelf', null, h('h2', null, icon('history'), 'Seguir viendo'), grid(cont)));
-    const f = YT.home();
-    infinite(box, f, {
-      empty: () => h('div.notice', null, icon('search', 'big'), h('h2', null, cfg.connected ? 'YouTube no ha dado recomendaciones' : 'Empieza buscando algo'),
-        h('p', null, cfg.connected ? 'Prueba a refrescar. Si sigue igual, vuelve a conectar tu cuenta en Ajustes.' : 'Busca un vídeo arriba o conecta tu cuenta: según lo que veas, aquí aparecerán recomendaciones.'),
-        h('div.btns', null, h('button.btn.acc', { onclick: () => M4.render() }, icon('refresh'), 'Reintentar'), !cfg.connected ? h('button.btn', { onclick: () => SettingsPage.connect() }, 'Conectar con YouTube') : '')),
-    });
+    const feedBox = h('div');
+    box.append(feedBox);
+    const empty = () => h('div.notice', null, icon('search', 'big'), h('h2', null, connected ? 'YouTube no ha dado recomendaciones' : 'Empieza buscando algo'),
+      h('p', null, connected ? 'Prueba a refrescar. Si sigue igual, vuelve a conectar tu cuenta en Ajustes.' : 'Busca un vídeo arriba o conecta tu cuenta: según lo que veas, aquí aparecerán recomendaciones.'),
+      h('div.btns', null, h('button.btn.acc', { onclick: () => M4.render() }, icon('refresh'), 'Reintentar'), !connected ? h('button.btn', { onclick: () => SettingsPage.connect() }, 'Conectar con YouTube') : ''));
+    let cur = null;
+    const start = f => {
+      if (cur) cur.stop();
+      feedBox.replaceChildren();
+      cur = infinite(feedBox, f, { empty, onFirst: () => paintChips(f) });
+    };
+    const home = takeHome() || YT.home();
+    let chipsDone = false;
+    function paintChips(f) {
+      if (chipsDone || !alive()) return;
+      const list = (f.chips || []).filter(c => c.token);
+      if (!list.length) return;
+      chipsDone = true;
+      chipsRow.hidden = false;
+      const all = h('button.chip.on', null, 'Todo');
+      const set = b => chipsRow.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b));
+      all.onclick = () => { set(all); start(YT.home()); };
+      chipsRow.replaceChildren(all, ...list.filter(c => !/^todo|^all$/i.test(c.label)).map(c => {
+        const b = h('button.chip', null, c.label);
+        b.onclick = () => { set(b); $('#main').scrollTop = 0; start(YT.chipFeed(c.token)); };
+        return b;
+      }));
+    }
+    start(home);
   });
+  // el inicio se empieza a pedir nada más abrir Mix4Up (para que salga ya)
+  let homePre = null, homePreAt = 0;
+  function preloadHome() {
+    homePre = YT.home(); homePreAt = Date.now();
+    const m = homePre.more.bind(homePre);
+    const first = m().catch(e => { throw e; });
+    let used = false;
+    homePre.more = () => { if (!used) { used = true; return first; } return m(); };
+  }
+  function takeHome() { const f = homePre && Date.now() - homePreAt < 120e3 ? homePre : null; homePre = null; return f; }
 
   /* ---------- búsqueda ---------- */
   route(/^\/search$/, async ({ q }) => {
@@ -280,7 +320,8 @@ const Views = (() => {
     const mine = local.videos.filter(v => words.every(w => norm(v.title + ' ' + v.folder).includes(w))).map(localItem);
     if (filter === 'local') { box.append(mine.length ? h('div.row-list', null, mine.map(it => card(it, { desc: true }))) : h('div.notice', null, h('h2', null, 'Ninguno de tus vídeos coincide'))); return; }
     if (mine.length && !filter) box.append(h('section.shelf', null, h('h2', null, icon('folder'), 'En tus vídeos'), h('div.row-list', null, mine.slice(0, 4).map(it => card(it)))));
-    infinite(box, YT.search(query, filter), { rows: true, desc: true, emptyText: 'No hay resultados para «' + query + '».' });
+    // en el móvil, como YouTube: resultados con la miniatura grande
+    infinite(box, YT.search(query, filter), { rows: innerWidth > 760, desc: true, emptyText: 'No hay resultados para «' + query + '».' });
   });
 
   /* ---------- suscripciones ---------- */
@@ -289,7 +330,7 @@ const Views = (() => {
     const box = setView('');
     box.append(head('Suscripciones'));
     const chans = await YT.guideSubs().catch(() => []);
-    if (chans.length) box.append(h('div.chips', { style: { position: 'static' } }, chans.slice(0, 40).map(c => h('a.chip', { href: '#/channel/' + c.id }, c.thumb ? h('img', { src: c.thumb, alt: '', style: { width: '22px', height: '22px', borderRadius: '50%' } }) : '', c.title))));
+    if (chans.length) box.append(h('div.subrow', null, chans.slice(0, 60).map(c => h('a', { href: '#/channel/' + c.id }, c.thumb ? h('img', { src: c.thumb, alt: '', loading: 'lazy' }) : h('span.ph0', null, icon('user')), h('span', null, c.title)))));
     if (!YT.connected() && !Journal.all('sub').length) {
       box.append(h('div.notice', null, icon('subs', 'big'), h('h2', null, 'Aún no sigues a nadie'), h('p', null, 'Conecta tu cuenta de YouTube para ver tus suscripciones, o suscríbete a canales desde Mix4Up.'),
         h('div.btns', null, h('button.btn.acc', { onclick: () => SettingsPage.connect() }, 'Conectar con YouTube'))));
@@ -417,12 +458,28 @@ const Views = (() => {
   });
   route(/^\/library$/, async () => {
     await loadLocal().catch(() => {});
+    await YT.account();
     const box = setView('');
-    const link = (href, ic, label) => h('a', { href }, icon(ic), label);
-    box.append(head('Biblioteca'), h('div.libgrid', null, link('#/history', 'history', 'Historial'), link('#/later', 'later', 'Ver más tarde'), link('#/likes', 'like', 'Me gusta'),
-      link('#/lists', 'list', 'Listas'), link('#/downloads', 'download', 'Descargas'), link('#/settings', 'gear', 'Ajustes')));
-    const hist = Journal.all('hist').slice(0, 12).map(e => fromMeta({ ...(e.v || {}), key: e.k })).filter(Boolean);
-    if (hist.length) box.append(h('section.shelf', null, h('h2', null, 'Visto hace poco'), grid(hist)));
+    const conn = YT.connected();
+    box.append(h('div.you', null, h('div.ava', null, icon('user')), h('div', null, h('h1', null, 'Tú'), h('small', null, conn ? 'Cuenta de YouTube conectada' : 'Sin cuenta de YouTube'),
+      !conn ? h('div', { style: { marginTop: '6px' } }, h('button.btn.acc', { onclick: () => SettingsPage.connect() }, 'Conectar con YouTube')) : '')));
+    const hist = Journal.all('hist').slice(0, 15).map(e => fromMeta({ ...(e.v || {}), key: e.k })).filter(Boolean);
+    const shelf = (title, href, items) => h('section.shelf', null, h('div.pagehead', { style: { margin: '14px 12px 10px' } }, h('h2', { style: { flex: 1 } }, title), href ? h('a.btn.ghost', { href }, 'Ver todo') : ''),
+      items.length ? h('div.hscroll', null, items.map(it => card(it))) : h('p.muted', { style: { margin: '0 12px' } }, 'Aún no hay nada.'));
+    box.append(shelf('Historial', '#/history', hist));
+    const lists = Journal.lists().map(l => ({ type: 'playlist', local: true, id: l.id, title: l.name, count: l.items.length + ' vídeos', thumb: (l.items[0] && (l.items[0].thumb || (l.items[0].id ? `https://i.ytimg.com/vi/${l.items[0].id}/hqdefault.jpg` : ''))) || '', channel: 'Mix4Up' }));
+    box.append(shelf('Listas', '#/lists', lists));
+    const row = (href, ic, label, n) => h('a.yrow', { href }, icon(ic), h('span', null, label), n != null ? h('small', null, n) : '');
+    box.append(h('div', { style: { marginTop: '6px' } },
+      row('#/local', 'folder', 'Mis vídeos', (local.videos || []).length),
+      row('#/later', 'later', 'Ver más tarde', Journal.all('wl').length || null),
+      row('#/likes', 'like', 'Vídeos que me gustan', Journal.all('like').length || null),
+      row('#/downloads', 'download', 'Descargas'),
+      row('#/subs', 'subs', 'Suscripciones'),
+      h('hr', { style: { border: 0, borderTop: '1px solid var(--line)', margin: '6px 0' } }),
+      row('#/settings', 'devices', ANDROID ? 'Conectar con el PC' : 'Conectar el móvil'),
+      row('#/settings', 'palette', 'Aspecto y colores'),
+      row('#/settings', 'gear', 'Ajustes')));
   });
 
   /* ---------- tus vídeos ---------- */
@@ -514,6 +571,17 @@ const Views = (() => {
     const theater = Settings.get().theater;
     const host = h('div.playhost');
     const titleEl = h('h1.vtitle', null, it.title || '');
+    const metaEl = h('div.vmeta');
+    let descText = '', descTop = '';
+    const openDesc = () => M4.sheet((sh, close) => {
+      const parts = descTop.split(' · ');
+      sh.append(h('h3', null, titleEl.textContent),
+        h('div.stats', null, ...parts.filter(Boolean).slice(0, 3).map(p0 => { const m = p0.match(/^([\d.,]+\s*(?:mil|M)?)\s*(.*)$/); return h('div', null, h('b', null, m ? m[1] : p0), h('small', null, m ? m[2] : '')); })),
+        h('div.desct', null, ...linkify(descText || 'Sin descripción.')));
+      sh.addEventListener('click', e => { if (e.target.closest('a[href="#"]')) close(); });
+    });
+    titleEl.onclick = () => { if (innerWidth <= 760) openDesc(); };
+    const paintMeta = () => metaEl.replaceChildren(h('span', null, descTop), descText || descTop ? h('b', { role: 'button', onclick: openDesc }, '…más') : '');
     const ownerEl = h('div.owner');
     const actsEl = h('div.vacts');
     const descEl = h('div.desc.short', { hidden: true });
@@ -522,7 +590,7 @@ const Views = (() => {
     const autoSw = h('span.switch' + (Settings.get().autoplay ? '.on' : ''), { role: 'switch', onclick: () => { Settings.set({ autoplay: !Settings.get().autoplay }); autoSw.classList.toggle('on', Settings.get().autoplay); } }, h('span', null, 'Reproducción automática'), h('i'));
     const plBox = h('div', { hidden: true, style: { background: 'var(--bg2)', borderRadius: 'var(--r)', padding: '12px', marginBottom: '12px', maxHeight: '420px', overflowY: 'auto' } });
     const v = setView('wide', h('div.watch' + (theater ? '.theater' : ''), null,
-      h('div.primary', null, host, h('div.info', null, titleEl, h('div.vbar', null, ownerEl, actsEl), chapEl, descEl)),
+      h('div.primary', null, host, h('div.info', null, titleEl, metaEl, h('div.vbar', null, ownerEl, actsEl), chapEl, descEl)),
       h('div.secondary', null, plBox, h('div.upnext', null, h('h3', null, it.src === 'local' ? 'Más de tus vídeos' : 'Siguientes'), autoSw), relEl)));
     document.body.classList.add('watching');
     Player.mount(host);
@@ -556,6 +624,7 @@ const Views = (() => {
       if (!ownerEl.childElementCount && inf.channel) ownerEl.append(h('a', { href: inf.channelId ? '#/channel/' + inf.channelId : null }, h('b', null, inf.channel)));
     };
     function setDesc(text, top) {
+      descText = text || ''; descTop = top || descTop; paintMeta();
       descEl.hidden = false;
       descEl.replaceChildren(top ? h('b', null, top) : '', ...linkify(text));
       descEl.onclick = e => { if (e.target.closest('a')) return; descEl.classList.toggle('short'); };
@@ -567,6 +636,7 @@ const Views = (() => {
     if (it.src === 'local') {
       titleEl.textContent = it.title;
       ownerEl.append(h('div', null, h('b', null, it.channel), h('small', null, [it.durText, it.size ? (it.size / 1048576).toFixed(0) + ' MB' : '', it._v ? it._v.ext.toUpperCase() : ''].filter(Boolean).join(' · '))));
+      descTop = [it.published, it.size ? (it.size / 1048576).toFixed(0) + ' MB' : ''].filter(Boolean).join(' · '); paintMeta();
       const others = local.videos.filter(x => x.folder === (it._v && it._v.folder) && x.id !== it.lid).map(localItem);
       const rel = (others.length ? others : local.videos.filter(x => x.id !== it.lid).map(localItem)).slice(0, 40);
       relEl.replaceChildren(...rel.map(r => card(r, { noAva: true })));
@@ -608,7 +678,7 @@ const Views = (() => {
       const l = Journal.lists().find(x => x.id === mlist);
       if (l) { const items = l.items.map(fromMeta).filter(Boolean); const idx = items.findIndex(x => x.id === id); queue = items.slice(idx + 1); plBox.hidden = false; plBox.replaceChildren(h('b', null, l.name), h('div.related', { style: { marginTop: '8px' } }, items.map(x => card(x, { noAva: true })))); }
     }
-    relEl.replaceChildren(...w.related.map(r => card(r, { noAva: true })));
+    relEl.replaceChildren(...w.related.map(r => card(r)));
     if (!w.related.length) relEl.append(h('p.muted', null, 'YouTube no dio relacionados para este vídeo.'));
     let cont = w.relCont;
     const relMore = h('div.loadmore');
@@ -616,7 +686,7 @@ const Views = (() => {
     const io = new IntersectionObserver(async es => {
       if (!es.some(e => e.isIntersecting) || !cont) return;
       const c = cont; cont = null;
-      try { const r = await YT.moreRelated(c); cont = r.cont; r.items.forEach(x => relEl.insertBefore(card(x, { noAva: true }), relMore)); } catch {}
+      try { const r = await YT.moreRelated(c); cont = r.cont; r.items.forEach(x => relEl.insertBefore(card(x), relMore)); } catch {}
     }, { root: $('#main'), rootMargin: '400px' });
     io.observe(relMore);
     if (!queue.length) queue = w.related.filter(x => x.type === 'video' && !Journal.watched('yt:' + x.id)).slice(0, 3);
@@ -659,5 +729,5 @@ const Views = (() => {
     box.replaceChildren(...(list.length ? [h('h4', null, 'Suscripciones'), ...list.slice(0, 12).map(c => h('a.sub', { href: '#/channel/' + c.id }, c.thumb ? h('img', { src: c.thumb, alt: '', loading: 'lazy' }) : icon('user'), h('span', null, c.title))), h('hr')] : []));
   }
 
-  return { card, grid, infinite, skeleton, loadLocal, localCopy, localItem, download, itemMenu, sideSubs, toggleLater, saveToList, watchCtx: () => watchCtx, local: () => local };
+  return { preloadHome, card, grid, infinite, skeleton, loadLocal, localCopy, localItem, download, itemMenu, sideSubs, toggleLater, saveToList, watchCtx: () => watchCtx, local: () => local };
 })();

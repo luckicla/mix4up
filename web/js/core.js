@@ -187,6 +187,15 @@ const M4 = (() => {
       pop.append(h('button', { role: 'menuitem', onclick: () => { closePop(); it.fn && it.fn(); } }, it.icon ? icon(it.icon) : '', h('span', null, it.label)));
     }
     document.body.append(pop);
+    if (innerWidth <= 760) {
+      // en el móvil, como YouTube: una hoja que sube desde abajo
+      pop.classList.add('sheet-pop');
+      const scrim = h('div.sheet-scrim', { onclick: () => closePop() });
+      document.body.insertBefore(scrim, pop);
+      popClose = pushClose(closePop);
+      curPop = { pop, outside: () => {}, scrim };
+      return;
+    }
     let x, y;
     if (anchor && anchor.getBoundingClientRect) {
       const r = anchor.getBoundingClientRect();
@@ -205,8 +214,27 @@ const M4 = (() => {
   function closePop() {
     if (!curPop) return;
     removeEventListener('pointerdown', curPop.outside, true);
-    curPop.pop.remove(); curPop = null;
+    curPop.pop.remove(); if (curPop.scrim) curPop.scrim.remove(); curPop = null;
     popClose && popClose(); popClose = null;
+  }
+
+  // una hoja que sube desde abajo (móvil) o una ventana (PC)
+  function sheet(build) {
+    if (innerWidth > 760) return modal((box, close) => build(box, close));
+    const scrim = h('div.sheet-scrim');
+    const sh = h('div.sheet', null, h('div.grab'));
+    let closeFn;
+    const close = () => { scrim.remove(); sh.remove(); if (closeFn) closeFn(); };
+    scrim.onclick = close;
+    // deslizar hacia abajo la cierra
+    let y0 = null;
+    sh.addEventListener('touchstart', e => { if (sh.scrollTop <= 0) y0 = e.touches[0].clientY; }, { passive: true });
+    sh.addEventListener('touchmove', e => { if (y0 != null) { const d = e.touches[0].clientY - y0; if (d > 0) sh.style.transform = `translateY(${d}px)`; } }, { passive: true });
+    sh.addEventListener('touchend', e => { if (y0 != null) { const d = e.changedTouches[0].clientY - y0; y0 = null; if (d > 90) close(); else sh.style.transform = ''; } });
+    build(sh, close);
+    document.body.append(scrim, sh);
+    closeFn = pushClose(close);
+    return close;
   }
 
   /* ---------- rutas (#/inicio, #/watch?v=…) ---------- */
@@ -267,6 +295,6 @@ const M4 = (() => {
 
   return {
     ANDROID, DESKTOP, $, $$, on, emit, api, Settings, h, icon, esc, dur, parseDur, views, ago, toast, modal, confirm, prompt,
-    popMenu, closePop, closeTop, pushClose, route, go, render, parseHash, failView, errorBox, dev, deviceName, store, copy, debounce, applyLook,
+    popMenu, closePop, sheet, closeTop, pushClose, route, go, render, parseHash, failView, errorBox, dev, deviceName, store, copy, debounce, applyLook,
   };
 })();

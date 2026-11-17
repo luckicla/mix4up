@@ -9,17 +9,25 @@
 // cuando YouTube cambia el orden de su página, Mix4Up sigue encontrándolas.
 
 const YT = (() => {
-  let cfg = null, cfgAt = 0;
+  let cfg = null, cfgAt = 0, acct = null, cfgP = null;
+  // rápido: ¿hay cuenta? (sin esperar a youtube.com); la configuración llega aparte
+  async function account() {
+    if (acct) return acct;
+    try { acct = await M4.api('/api/yt/account'); } catch { acct = { connected: false }; }
+    return acct;
+  }
+  function warm() { if (!cfgP) cfgP = getCfg().finally(() => { cfgP = null; }); return cfgP; }
   async function getCfg(force) {
     if (cfg && !force && Date.now() - cfgAt < 30 * 60e3) return cfg;
-    try { cfg = await M4.api('/api/yt/cfg' + (force ? '?fresh=1' : '')); cfgAt = Date.now(); }
+    if (force) acct = null;
+    try { cfg = await M4.api('/api/yt/cfg' + (force ? '?fresh=1' : '')); cfgAt = Date.now(); acct = { connected: !!cfg.connected }; }
     catch { cfg = cfg || { clientVersion: '2.20251114.01.00', hl: 'es', gl: 'ES', connected: false }; }
     return cfg;
   }
-  const connected = () => !!(cfg && cfg.connected);
+  const connected = () => !!((cfg && cfg.connected) || (acct && acct.connected));
 
   async function call(ep, body = {}) {
-    const c = await getCfg();
+    const c = cfg && Date.now() - cfgAt < 30 * 60e3 ? cfg : await (cfgP || warm());
     const ctx = { client: { clientName: 'WEB', clientVersion: c.clientVersion, hl: 'es', gl: c.gl || 'ES', visitorData: c.visitorData || undefined,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Madrid', utcOffsetMinutes: -new Date().getTimezoneOffset() },
       user: { lockedSafetyMode: false }, request: { useSsl: true } };
@@ -201,13 +209,25 @@ const YT = (() => {
   }
 
   // un feed que se puede seguir cargando (scroll infinito)
+  // las «chips» de arriba del inicio (Todo, Música, Directos…), las de YouTube
+  function chipsOf(r) {
+    const out = [];
+    for (const c of findAll(r, 'chipCloudChipRenderer')) {
+      const label = text(c.text);
+      const token = find(c.navigationEndpoint || {}, 'token');
+      if (label && !/^shorts$/i.test(label)) out.push({ label, token: token || '', selected: !!c.isSelected });
+    }
+    return out;
+  }
   function feed(first, next) {
     const seen = new Set();
     let cont = null, done = false, started = false;
     return {
+      chips: [],
       async more() {
         if (done) return [];
         const r = started ? (cont ? await next(cont) : null) : await first();
+        if (!started && r) this.chips = chipsOf(r);
         started = true;
         if (!r) { done = true; return []; }
         const c = collect(r);
@@ -222,6 +242,8 @@ const YT = (() => {
       raw: null,
     };
   }
+  // una chip del inicio: su propia tanda de recomendaciones
+  const chipFeed = token => feed(() => call('browse', { continuation: token }), c => call('browse', { continuation: c }));
   const browseFeed = (browseId, params) => feed(() => call('browse', params ? { browseId, params } : { browseId }), c => call('browse', { continuation: c }));
 
   /* ---------- con yt-dlp (si la web de YouTube cambia y lo de arriba falla) ---------- */
@@ -261,6 +283,7 @@ const YT = (() => {
           }
         },
         get done() { return fallback ? fallback.done : f.done; },
+        get chips() { return f.chips || []; },
       };
     }
     return personalMix();
@@ -443,7 +466,7 @@ const YT = (() => {
     await call('browse/edit_playlist', { playlistId: 'WL', actions: [on ? { addedVideoId: id, action: 'ACTION_ADD_VIDEO' } : { removedVideoId: id, action: 'ACTION_REMOVE_VIDEO_BY_VIDEO_ID' }] });
   }
 
-  return { getCfg, connected, call, collect, clean, isShort, home, subscriptions, guideSubs, search, suggest, watch, moreRelated,
+  return { getCfg, account, warm, chipFeed, connected, call, collect, clean, isShort, home, subscriptions, guideSubs, search, suggest, watch, moreRelated,
     channel, channelTab, channelVideos, playlist, history, myPlaylists, like, subscribe, watchLater, dlpFeed, text, find, findAll,
     shortsRemoved: () => shortsRemoved, ytId };
 })();

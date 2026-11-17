@@ -26,9 +26,8 @@ const portable = !!portableDir;
 const TOKEN = crypto.randomBytes(16).toString('hex');
 const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
 
-if (portable) {
-  try { app.setPath('userData', path.join(portableDir, '.mix4up', 'escritorio')); } catch {}
-}
+// lo de la ventana (su almacenamiento, la caché), dentro de la carpeta de datos de Mix4Up
+try { app.setPath('userData', portable ? path.join(portableDir, '.mix4up', 'escritorio') : path.join(app.getPath('appData'), 'Mix4Up', 'escritorio')); } catch {}
 app.setAppUserModelId('com.luckicla.mix4up.desktop');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-features', 'Translate');

@@ -38,12 +38,23 @@ const Player = (() => {
   const bGear = h('button.ib', { 'aria-label': 'Ajustes del vídeo', title: 'Calidad, velocidad, temporizador…' }, icon('gear'));
   const bPip = h('button.ib.hide-mini', { 'aria-label': 'Imagen dentro de imagen', title: 'Imagen dentro de imagen (i)' }, icon('pip'));
   const bTheater = h('button.ib.hide-mini', { 'aria-label': 'Modo cine', title: 'Modo cine (t)' }, h('span', { style: { fontSize: '12px', fontWeight: 800 } }, '▭'));
-  const bFS = h('button.ib.hide-mini', { 'aria-label': 'Pantalla completa', title: 'Pantalla completa (f)' }, icon('fs'));
-  const row = h('div.row', null, bPlay, bNext, h('span.volwrap', { style: { display: 'flex', alignItems: 'center' } }, bMute, h('span.vol', null, volIn)), time,
+  const bFS = h('button.ib.hide-mini.fsb', { 'aria-label': 'Pantalla completa', title: 'Pantalla completa (f)' }, icon('fs'));
+  const row = h('div.row', null, bPlay, bNext, h('span.volwrap', null, bMute, h('span.vol', null, volIn)), time,
     h('span.grow'), tagTimer, tagAB, tagSpeed, bCC, bGear, bPip, bTheater, bFS);
   const ctrls = h('div.ctrls', null, bar, row);
   const menu = h('div.menu', { hidden: true });
-  const el = h('div.player.paused', { tabindex: 0 }, video, poster, audioMode, h('div.shade.topshade'), h('div.shade'), ripL, ripR, ptitle, big, loading, hud, ctrls, menu);
+  // en el móvil, como YouTube: los botones grandes en el centro, subtítulos y ajustes arriba,
+  // y una rayita del progreso siempre a la vista
+  const mBack = h('button.ib.mc', { 'aria-label': 'Atrás 10 segundos' }, h('span.ten', null, '10'), icon('refresh', 'rev'));
+  const mPlay = h('button.ib.mc.mbig', { 'aria-label': 'Reproducir' }, icon('play'));
+  const mNext = h('button.ib.mc', { 'aria-label': 'Siguiente' }, icon('next'));
+  const center = h('div.mcenter', null, mBack, mPlay, mNext);
+  const mCC = h('button.ib', { 'aria-label': 'Subtítulos' }, icon('cc'));
+  const mGear = h('button.ib', { 'aria-label': 'Ajustes del vídeo' }, icon('gear'));
+  const mAuto = h('button.ib.mauto', { 'aria-label': 'Reproducción automática', title: 'Reproducción automática' }, h('span.sw2'));
+  const topR = h('div.mtop', null, mAuto, mCC, mGear);
+  const thin = h('div.thin', null, h('i'));
+  const el = h('div.player.paused', { tabindex: 0 }, video, poster, audioMode, h('div.shade.topshade'), h('div.shade'), ripL, ripR, ptitle, big, loading, hud, center, topR, ctrls, thin, menu);
   el.append(audio);
   audio.hidden = true;
 
@@ -239,6 +250,7 @@ const Player = (() => {
       video.append(tr);
     });
     bCC.hidden = !subTracks.length;
+    mCC.hidden = !subTracks.length;
     for (const tt of video.textTracks) tt.mode = 'disabled';
     if (Settings.get().subs && subTracks.length) {
       const lang = Settings.get().subLang || 'es';
@@ -250,6 +262,7 @@ const Player = (() => {
     curSub = i >= 0 ? i : null;
     [...video.textTracks].forEach((tt, k) => { tt.mode = k === i ? 'showing' : 'disabled'; });
     bCC.classList.toggle('on', i >= 0);
+    mCC.classList.toggle('on', i >= 0);
   }
   function toggleSubs() {
     if (!subTracks.length) { toast('Este vídeo no tiene subtítulos'); return; }
@@ -334,6 +347,7 @@ const Player = (() => {
     const playing = want && (!master().paused || holding);
     el.classList.toggle('paused', !playing);
     bPlay.replaceChildren(icon(playing ? 'pause' : 'play'));
+    mPlay.replaceChildren(icon(playing ? 'pause' : 'play'));
     bPlay.setAttribute('aria-label', playing ? 'Pausar' : 'Reproducir');
     if (ANDROID) try { A.setKeepScreenOn(playing && !audioOnly); } catch {}
   }
@@ -341,6 +355,7 @@ const Player = (() => {
     const t = now(), d = total();
     const pct = d ? Math.min(100, t / d * 100) : 0;
     if (!dragging) { fill.style.width = pct + '%'; knob.style.left = pct + '%'; }
+    thin.firstChild.style.width = pct + '%';
     time.textContent = dur(t) + ' / ' + dur(d);
   }
   // lo que ya está bajado entero (Mix4Up se baja el vídeo en segundo plano, como YouTube)
@@ -482,6 +497,14 @@ const Player = (() => {
 
   /* ---------- botones ---------- */
   bPlay.onclick = e => { e.stopPropagation(); toggle(); };
+  mPlay.onclick = e => { e.stopPropagation(); toggle(); wake(); };
+  mBack.onclick = e => { e.stopPropagation(); skip(-10); wake(); };
+  mNext.onclick = e => { e.stopPropagation(); if (queue[0]) next(); else skip(10); };
+  mCC.onclick = e => { e.stopPropagation(); toggleSubs(); mCC.classList.toggle('on', curSub != null); };
+  mGear.onclick = e => { e.stopPropagation(); menu.hidden ? openMenu('main') : closeMenu(); };
+  const paintAuto = () => mAuto.classList.toggle('on', !!Settings.get().autoplay);
+  mAuto.onclick = e => { e.stopPropagation(); Settings.set({ autoplay: !Settings.get().autoplay }); paintAuto(); toast(Settings.get().autoplay ? 'Reproducción automática activada' : 'Reproducción automática desactivada'); };
+  M4.on('ready', paintAuto); M4.on('settings', p => { if ('autoplay' in p) paintAuto(); });
   bNext.onclick = e => { e.stopPropagation(); if (queue[0]) next(); else toast('No hay siguiente'); };
   bMute.onclick = e => { e.stopPropagation(); toggleMute(); };
   volIn.oninput = e => { e.stopPropagation(); setVolume(+volIn.value); };
@@ -494,7 +517,7 @@ const Player = (() => {
   tagAB.onclick = e => { e.stopPropagation(); ab = { a: null, b: null }; updateAB(); toast('Tramo quitado'); };
   tagSpeed.onclick = e => { e.stopPropagation(); openMenu('speed'); };
   audioMode.onclick = e => { e.stopPropagation(); setAudioOnly(false); };
-  [ctrls, menu].forEach(x => x.addEventListener('click', e => e.stopPropagation()));
+  [ctrls, menu, center, topR].forEach(x => x.addEventListener('click', e => e.stopPropagation()));
 
   /* ---------- menú del vídeo ---------- */
   let menuClose = null;
@@ -665,19 +688,25 @@ const Player = (() => {
   let sx = 0, sy = 0, swipe = null, startVal = 0;
   el.addEventListener('touchstart', e => {
     touchMode = true;
-    if (e.target.closest('.ctrls,.menu,.perr,.resume,.next-up')) return;
+    if (e.target.closest('.ctrls,.menu,.perr,.resume,.next-up,.mcenter,.mtop')) return;
     const t = e.touches[0];
     sx = t.clientX; sy = t.clientY; swipe = null;
   }, { passive: true });
   el.addEventListener('touchmove', e => {
-    if (!Settings.get().gestures || e.target.closest('.ctrls,.menu')) return;
+    if (e.target.closest('.ctrls,.menu')) return;
     const t = e.touches[0], dy = sy - t.clientY, dx = t.clientX - sx;
-    if (!swipe && Math.abs(dy) > 18 && Math.abs(dy) > Math.abs(dx) * 1.5 && (isFS() || el.closest('.watch'))) {
+    if (!isFS()) {
+      // como YouTube: deslizar hacia abajo lo minimiza, hacia arriba pantalla completa
+      if (el.closest('.watch') && Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { e.preventDefault(); swipe = dy < 0 ? 'down' : 'up'; el.style.transform = dy < 0 ? `translateY(${Math.min(120, -dy) * 0.6}px) scale(${1 - Math.min(120, -dy) / 900})` : ''; }
+      return;
+    }
+    if (!Settings.get().gestures) return;
+    if (!swipe && Math.abs(dy) > 18 && Math.abs(dy) > Math.abs(dx) * 1.5) {
       const r = el.getBoundingClientRect();
       swipe = (sx - r.left) < r.width / 2 ? 'bright' : 'vol';
       startVal = swipe === 'vol' ? (ANDROID ? safe(() => A.getVolume(), 0.5) : +Settings.get().volume) : (ANDROID ? safe(() => A.getBrightness(), 0.5) : 1);
     }
-    if (swipe) {
+    if (swipe === 'vol' || swipe === 'bright') {
       e.preventDefault();
       const v = Math.max(0, Math.min(1, startVal + dy / (el.clientHeight * 0.8)));
       if (swipe === 'vol') { if (ANDROID) { try { A.setVolume(v); } catch {} showHud('vol', Math.round(v * 100) + '%'); } else setVolume(v); }
@@ -685,8 +714,16 @@ const Player = (() => {
     }
   }, { passive: false });
   el.addEventListener('touchend', e => {
+    if (swipe === 'down' || swipe === 'up') {
+      const t = e.changedTouches[0], dy = t.clientY - sy;
+      el.style.transform = '';
+      const w = swipe; swipe = null;
+      if (w === 'down' && dy > 70) M4.emit('player:minimize');
+      else if (w === 'up' && dy < -60) toggleFS(true);
+      return;
+    }
     if (swipe) { swipe = null; return; }
-    if (e.target.closest('.ctrls,.menu,.perr,.resume,.next-up,.audiomode')) return;
+    if (e.target.closest('.ctrls,.menu,.perr,.resume,.next-up,.audiomode,.mcenter,.mtop')) return;
     if (el.closest('#mini')) { M4.emit('player:expand'); return; }
     if (!menu.hidden) { closeMenu(); return; }
     const t = e.changedTouches[0];
@@ -713,7 +750,7 @@ const Player = (() => {
     }, side ? 300 : 0);
   });
   const safe = (fn, d) => { try { const v = fn(); return v == null || isNaN(v) ? d : +v; } catch { return d; } };
-  ctrls.addEventListener('touchstart', wake, { passive: true });
+  [ctrls, center, topR].forEach(x => x.addEventListener('touchstart', wake, { passive: true }));
 
   /* ---------- teclado ---------- */
   document.addEventListener('keydown', e => {

@@ -68,15 +68,16 @@ def main():
         if what == 'update':
             want = sys.argv[3]
             checks.ready(ev)
-            before = get(URL + '/api/version')
-            checks.say('versión ahora:', before, '· nueva:', want)
+            info = ev('Mix4UpShell.info()')
+            checks.say('app ahora:', info, '· nueva:', want)
             checks.say('pulso Actualizar:', ev('Mix4UpShell.install()'))
-            t0, last = time.time(), None
+            t0, last, gone = time.time(), None, False
             while time.time() - t0 < 600:
                 try:
                     s = ev('Mix4UpShell.state()')
                 except Exception:
                     checks.say('la ventana se cerró (se está actualizando)')
+                    gone = True
                     break
                 if s != last:
                     checks.say('estado:', s)
@@ -87,8 +88,13 @@ def main():
                         checks.summary(os.path.join(out, 'resumen-update.txt'))
                         sys.exit(1)
                 time.sleep(1)
-    v = checks.until(lambda: (lambda x: x if x.startswith(want) else None)(get(URL + '/api/version')), 420, 2)
-    checks.res('Se actualiza sola y abre la nueva', 'OK' if v else 'FALLO', v or ('contesta: ' + get(URL + '/api/version')))
+    if not gone:
+        checks.res('Se actualiza sola', 'FALLO', 'no llegó a instalarse')
+        sys.exit(1)
+    # la vieja se cierra y la nueva se abre sola: el motor vuelve a contestar
+    time.sleep(5)
+    v = checks.until(lambda: get(URL + '/api/version'), 420, 2)
+    checks.res('Se actualiza sola y se abre la nueva', 'OK' if v else 'FALLO', v or 'no volvió a abrirse')
     sys.exit(0 if v else 1)
 
 

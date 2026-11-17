@@ -413,8 +413,45 @@ func (l *library) thumb(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
+		// sin miniatura aún: con ffmpeg (si está), un fotograma ya mismo
+		if !fileExists(p) {
+			if v := l.get(id); v != nil && ffmpegPath() != "" {
+				l.makeThumb(v, p)
+			}
+		}
+		if !fileExists(p) {
+			http.NotFound(w, r)
+			return
+		}
 		w.Header().Set("Cache-Control", "max-age=86400")
 		http.ServeFile(w, r, p)
+	}
+}
+
+var thumbSem = make(chan struct{}, 2)
+
+func (l *library) makeThumb(v *video, p string) {
+	thumbSem <- struct{}{}
+	defer func() { <-thumbSem }()
+	if fileExists(p) {
+		return
+	}
+	at := 5.0
+	if v.Dur > 0 {
+		at = min(30, v.Dur*0.15)
+	}
+	os.MkdirAll(filepath.Dir(p), 0o755)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	c := exec.CommandContext(ctx, ffmpegPath(), "-v", "error", "-ss", strconv.FormatFloat(at, 'f', 1, 64), "-i", v.path, "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "4", "-y", p+".tmp.jpg")
+	hideConsole(c)
+	if c.Run() == nil && fileExists(p+".tmp.jpg") {
+		os.Rename(p+".tmp.jpg", p)
+		l.mu.Lock()
+		v.Thumb = true
+		l.mu.Unlock()
+	} else {
+		os.Remove(p + ".tmp.jpg")
 	}
 }
 

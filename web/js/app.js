@@ -86,7 +86,7 @@ const App = (() => {
 
   /* ---------- la cuenta ---------- */
   async function paintAccount() {
-    const c = await YT.getCfg();
+    const c = await YT.account();
     const b = $('#btnAccount');
     b.classList.toggle('on', !!c.connected);
     b.title = c.connected ? 'Cuenta de YouTube conectada' : 'Conectar con YouTube';
@@ -128,6 +128,20 @@ const App = (() => {
   M4.on('player:expand', expand);
   Player.video.addEventListener('play', paintMini); Player.video.addEventListener('pause', paintMini);
   Player.audio.addEventListener('play', paintMini); Player.audio.addEventListener('pause', paintMini);
+
+  // deslizar el vídeo hacia abajo: se hace pequeño (y sigue sonando)
+  M4.on('player:minimize', () => { if (history.length > 1) history.back(); else go('/'); });
+
+  // en el móvil, como YouTube: la barra de arriba se esconde al bajar y vuelve al subir
+  let lastY = 0;
+  $('#main').addEventListener('scroll', () => {
+    const y = $('#main').scrollTop;
+    if (innerWidth > 760) return;
+    if (y > lastY + 6 && y > 120) document.body.classList.add('top-hidden');
+    else if (y < lastY - 6 || y < 60) document.body.classList.remove('top-hidden');
+    lastY = y;
+  }, { passive: true });
+  M4.on('route', () => document.body.classList.remove('top-hidden'));
 
   /* ---------- «atrás» (botón del móvil) ---------- */
   // devuelve true si se ha encargado; false: la app se va al fondo
@@ -193,7 +207,9 @@ const App = (() => {
     M4.emit('ready');
     const info = await api('/api/info').catch(() => ({}));
     $('#verLabel').textContent = info.version ? 'Versión ' + info.version.split('.').slice(0, 3).join('.') : '';
-    await YT.getCfg().catch(() => {});
+    await YT.account();
+    if (!location.hash || location.hash === '#/') Views.preloadHome();
+    YT.warm();
     paintAccount();
     Views.sideSubs();
     Sync.start();
@@ -201,7 +217,7 @@ const App = (() => {
     setTimeout(M4.applyLook, 0);
     if (ANDROID) setTimeout(() => window.M4shared(), 1500);
     // la primera vez: dónde está cada cosa
-    if (!M4.store.get('welcomed')) {
+    if (!M4.store.get('welcomed') && !YT.connected()) {
       M4.store.set('welcomed', 1);
       setTimeout(() => toast('Bienvenido a Mix4Up: YouTube sin Shorts y tus vídeos. Conecta tu cuenta para ver tus recomendaciones.', { action: 'Conectar', fn: SettingsPage.connect, ms: 9000 }), 1200);
     }

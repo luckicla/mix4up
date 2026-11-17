@@ -15,6 +15,10 @@ on:
 permissions:
   contents: write
 
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: '1'
+
 concurrency:
   group: mix4up-build
   cancel-in-progress: false
@@ -187,6 +191,7 @@ jobs:
           Start-Sleep 3
           $v = (Get-Item $app).VersionInfo.ProductVersion
           "Mix4Up.exe instalado ahora: $v"
+          if (-not "${{ needs.version.outputs.v }}".StartsWith($v)) { Write-Error "el exe instalado sigue siendo $v"; exit 1 }
           Start-Process $app -ArgumentList '--remote-debugging-port=9222'
           python tools/prueba/pc.py todo 9222 out
           if ($LASTEXITCODE) { exit 1 }
