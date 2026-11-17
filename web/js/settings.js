@@ -107,6 +107,11 @@ const SettingsPage = (() => {
           const btn = e.currentTarget; btn.disabled = true; toast('Leyendo la sesión de ' + n + '… (ciérralo si da error)');
           try { await api('/api/yt/frombrowser?b=' + b, { method: 'POST' }); await afterLogin(); } catch (err) { toast(err.message, { ms: 7000 }); } finally { btn.disabled = false; }
         } }, n)))),
+      ANDROID ? h('div.set', null, h('span', null, 'Traer la sesión del PC', h('small', null, Sync.paired() ? 'Si en el PC ya conectaste YouTube, el móvil la recibe por tu WiFi (no pasa por internet).' : 'Primero conecta el móvil con el PC (más abajo, en «Móvil y PC»). Luego la sesión del PC pasa al móvil por tu WiFi.')),
+        h('button.btn' + (cfg.connected ? '.ghost' : '.acc'), { disabled: !Sync.paired(), onclick: async e => {
+          const btn = e.currentTarget; btn.disabled = true;
+          try { await Sync.pullAccount(); await afterLogin(); } catch (err) { toast(err.message, { ms: 7000 }); } finally { btn.disabled = false; }
+        } }, 'Traer del PC')) : '',
       !DESKTOP && !ANDROID ? '' : h('div.set', null, h('span', null, 'Con un archivo de cookies', h('small', null, 'Por si el inicio de sesión de Google no deja entrar desde aquí.')), h('button.btn.ghost', { onclick: importCookies }, 'Elegir cookies.txt')),
       sw('markWatched', 'Contar en tu historial de YouTube lo que ves aquí', 'Así YouTube aprende de lo que ves en Mix4Up y te recomienda mejor.')));
 
@@ -149,9 +154,10 @@ const SettingsPage = (() => {
       sel('speed', 'Velocidad', '', [[0.75, '0,75×'], [1, 'Normal'], [1.25, '1,25×'], [1.5, '1,5×'], [2, '2×']]),
       sw('subs', 'Subtítulos activados', 'Si el vídeo los tiene.'),
       sel('subLang', 'Idioma de los subtítulos', '', [['es', 'Español'], ['en', 'Inglés'], ['ca', 'Catalán'], ['fr', 'Francés'], ['pt', 'Portugués'], ['it', 'Italiano'], ['de', 'Alemán']]),
-      ANDROID ? sw('gestures', 'Gestos en el vídeo', 'Dos toques a un lado: ±10 s. Mantener pulsado: a 2×. Deslizar a los lados: adelantar o atrasar. Hacia abajo: minimizar; hacia arriba: pantalla completa. En pantalla completa, arriba/abajo a la izquierda: brillo; a la derecha: volumen.') : '',
+      ANDROID ? sw('fillScreen', 'Llenar la pantalla en pantalla completa', 'Sin bordes negros, también por la zona de la cámara. Pellizca el vídeo para cambiarlo al momento.') : '',
       ANDROID ? sw('haptics', 'Vibración', 'Una vibración suave al tocar, al dar a me gusta, al mantener pulsado…') : '',
-      ANDROID ? sw('bgPlay', 'Seguir oyéndolo con la pantalla apagada', 'El sonido sigue en segundo plano, con controles en la notificación.') : '',
+      ANDROID ? sw('bgPlay', 'Seguir sonando en segundo plano', 'Al salir de la app o apagar la pantalla, el vídeo sigue sonando, con controles en la notificación.') : '',
+      ANDROID ? sw('autoPip', 'Ventanita al salir de la app', 'Si sales con el botón de inicio mientras ves un vídeo, sigue en una ventanita flotante (como YouTube).') : '',
       sel('sleepAction', 'Al acabar el temporizador para dormir', '', [['pause', 'Parar el vídeo'], ['close', 'Parar y cerrar Mix4Up'], ...(DESKTOP ? [['shutdown', 'Parar y apagar el PC']] : [])])));
 
     // sin shorts

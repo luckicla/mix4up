@@ -142,6 +142,9 @@ const App = (() => {
     lastY = y;
   }, { passive: true });
   M4.on('route', () => document.body.classList.remove('top-hidden'));
+  // el móvil sabe si estás viendo un vídeo: al salir con «inicio», ventanita (como YouTube)
+  const tellWatching = () => { if (!ANDROID) return; try { Mix4UpAndroid.setWatching(location.hash.startsWith('#/watch') && Settings.get().autoPip !== false); } catch {} };
+  M4.on('route', tellWatching); M4.on('watching', tellWatching);
 
   /* ---------- gestos y vibración del móvil ---------- */
   // tocar la pestaña en la que ya estás: arriba del todo (y otra vez: refrescar)

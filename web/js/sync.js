@@ -278,5 +278,15 @@ const Sync = (() => {
     setTimeout(readNow, 3000);
   }
 
-  return { start, syncNow, paired, paintSettings, pcVideos, pcVideo, continueHere };
+  // la sesión de YouTube del PC pasa al móvil (solo entre tus aparatos, por tu WiFi)
+  async function pullAccount() {
+    let text;
+    try { text = await lan('/lan/account', {}, 8000); }
+    catch (e) { if (/ 404$/.test(e.message)) throw new Error('En el PC aún no has conectado YouTube. Conéctalo allí primero.'); throw e; }
+    if (!text || !/youtube\.com/.test(text)) throw new Error('En el PC aún no has conectado YouTube. Conéctalo allí primero.');
+    const r = await api('/api/yt/cookies', { method: 'POST', body: text });
+    if (r && r.connected === false) throw new Error('La sesión del PC no sirvió. Vuelve a conectar YouTube en el PC.');
+  }
+
+  return { start, syncNow, paired, paintSettings, pcVideos, pcVideo, continueHere, pullAccount };
 })();

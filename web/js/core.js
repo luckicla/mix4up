@@ -37,7 +37,7 @@ const M4 = (() => {
     theme: 'dark', accent: '#ff2e88', accent2: '#c8ff00', radius: 12, density: 'normal', font: 'system', cardStyle: 'round',
     autoplay: true, quality: 'auto', qualityCap: ANDROID ? 720 : 1080, speed: 1, subs: false, subLang: 'es', subSize: 100,
     strictShorts: true, volume: 1, muted: false, autoUpdate: true, theater: false, resume: true, markWatched: true,
-    syncLook: false, gestures: true, haptics: true, navStyle: 'float', navAlpha: 72, homeSource: 'auto', sleepAction: 'pause', bgPlay: true, lookVer: 0,
+    syncLook: false, gestures: true, haptics: true, navStyle: 'float', navAlpha: 72, homeSource: 'auto', sleepAction: 'pause', bgPlay: true, autoPip: true, fillScreen: true, lookVer: 0,
   };
   let settings = { ...DEFAULTS }, saveT = 0;
   const Settings = {
@@ -224,10 +224,15 @@ const M4 = (() => {
     curPop = { pop, outside };
   }
   let curPop = null, popClose = null;
+  // en el móvil las hojas bajan antes de irse
+  function leave(...els) {
+    if (innerWidth > 760) { els.forEach(x => x && x.remove()); return; }
+    els.forEach(x => { if (!x) return; x.style.transform = ''; x.classList.add('out'); x.style.pointerEvents = 'none'; setTimeout(() => x.remove(), 210); });
+  }
   function closePop() {
     if (!curPop) return;
     removeEventListener('pointerdown', curPop.outside, true);
-    curPop.pop.remove(); if (curPop.scrim) curPop.scrim.remove(); curPop = null;
+    leave(curPop.pop, curPop.scrim); curPop = null;
     popClose && popClose(); popClose = null;
   }
 
@@ -237,13 +242,14 @@ const M4 = (() => {
     const scrim = h('div.sheet-scrim');
     const sh = h('div.sheet', null, h('div.grab'));
     let closeFn;
-    const close = () => { scrim.remove(); sh.remove(); if (closeFn) closeFn(); };
+    let gone = false;
+    const close = () => { if (gone) return; gone = true; leave(scrim, sh); if (closeFn) closeFn(); };
     scrim.onclick = close;
     // deslizar hacia abajo la cierra
     let y0 = null;
     sh.addEventListener('touchstart', e => { if (sh.scrollTop <= 0) y0 = e.touches[0].clientY; }, { passive: true });
-    sh.addEventListener('touchmove', e => { if (y0 != null) { const d = e.touches[0].clientY - y0; if (d > 0) sh.style.transform = `translateY(${d}px)`; } }, { passive: true });
-    sh.addEventListener('touchend', e => { if (y0 != null) { const d = e.changedTouches[0].clientY - y0; y0 = null; if (d > 90) close(); else sh.style.transform = ''; } });
+    sh.addEventListener('touchmove', e => { if (y0 != null) { const d = e.touches[0].clientY - y0; if (d > 0) { sh.style.transition = 'none'; sh.style.transform = `translateY(${d}px)`; } } }, { passive: true });
+    sh.addEventListener('touchend', e => { if (y0 != null) { const d = e.changedTouches[0].clientY - y0; y0 = null; sh.style.transition = ''; if (d > 90) close(); else sh.style.transform = ''; } });
     build(sh, close);
     document.body.append(scrim, sh);
     closeFn = pushClose(close);
@@ -258,13 +264,19 @@ const M4 = (() => {
     const [path, qs] = raw.split('?');
     return { path, q: new URLSearchParams(qs || ''), raw };
   }
-  let renderSeq = 0;
+  let renderSeq = 0, lastPath = '', enterT = 0;
   async function render() {
     const r = parseHash();
     const seq = ++renderSeq;
     for (const { pattern, fn } of routes) {
       const m = r.path.match(pattern);
       if (m) {
+        const v = $('#view'), was = lastPath;
+        lastPath = r.path;
+        if (v && innerWidth <= 760 && !(r.path === '/watch' && was === '/watch')) {
+          v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter');
+          clearTimeout(enterT); enterT = setTimeout(() => v.classList.remove('enter'), 450);
+        }
         emit('route', r);
         try { await fn({ ...r, m, alive: () => seq === renderSeq }); }
         catch (e) { console.error(e); if (seq === renderSeq) failView(e, render); }

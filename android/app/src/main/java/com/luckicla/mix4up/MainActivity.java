@@ -56,7 +56,7 @@ public class MainActivity extends Activity {
     private static VideoLibrary library;
     private static String token = "";
     private static String shared;
-    private static boolean keepOn, fullscreen, inPip, playing, testMode;
+    private static boolean keepOn, fullscreen, inPip, playing, testMode, watching;
     private static android.webkit.PermissionRequest camRequest;
     private ValueCallback<Uri[]> fileCallback;
 
@@ -238,8 +238,9 @@ public class MainActivity extends Activity {
 
     @Override protected void onUserLeaveHint() {
         super.onUserLeaveHint();
-        // al salir con el botón de inicio mientras se ve un vídeo: imagen dentro de imagen
-        if (playing && fullscreen) enterPip(16, 9);
+        // al salir con el botón de inicio mientras se ve un vídeo: ventanita flotante
+        // (si no, sigue sonando en segundo plano con la notificación)
+        if (playing && (fullscreen || watching)) enterPip(16, 9);
     }
 
     boolean enterPip(int w, int h) {
@@ -313,7 +314,14 @@ public class MainActivity extends Activity {
         } else {
             w.getDecorView().setSystemUiVisibility(on ? View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE : 0);
         }
-        if (Build.VERSION.SDK_INT >= 28) w.getAttributes().layoutInDisplayCutoutMode = on ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+        // en pantalla completa el vídeo ocupa también la zona de la cámara
+        if (Build.VERSION.SDK_INT >= 28) {
+            WindowManager.LayoutParams lp = w.getAttributes();
+            lp.layoutInDisplayCutoutMode = on ? (Build.VERSION.SDK_INT >= 30 ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES)
+                                              : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+            w.setAttributes(lp);
+        }
+        if (Build.VERSION.SDK_INT >= 30) w.setDecorFitsSystemWindows(!on);
         a.setRequestedOrientation(on ? (landscape ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT) : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
     }
 
@@ -473,6 +481,7 @@ public class MainActivity extends Activity {
             playing = on;
             withWindow(a -> { keepOn = on; if (on) a.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); else a.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); });
         }
+        @JavascriptInterface public void setWatching(boolean on) { watching = on; }
         @JavascriptInterface public void setFullscreen(boolean on, boolean landscape) { withWindow(a -> applyFullscreen(a, on, landscape)); }
         @JavascriptInterface public void enterPip(int w, int h) { withWindow(a -> a.enterPip(w, h)); }
         @JavascriptInterface public float getVolume() {

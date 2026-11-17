@@ -170,6 +170,18 @@ func (s *server) lanRoutes() http.Handler {
 	mux.HandleFunc("/lan/state", s.lanAuth(s.lanState))
 	mux.HandleFunc("/lan/journal", s.lanAuth(func(w http.ResponseWriter, r *http.Request) { s.journalDoc(w, r, true) }))
 	mux.HandleFunc("/lan/now", s.lanAuth(s.nowAPI))
+	// la sesión de YouTube, para el móvil emparejado (nunca sale de tu WiFi)
+	mux.HandleFunc("/lan/account", s.lanAuth(func(w http.ResponseWriter, r *http.Request) {
+		b, err := os.ReadFile(s.yt.file())
+		if err != nil || !s.yt.connected() {
+			http.Error(w, "sin sesión", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Write(b)
+		logf("lan: sesión de YouTube enviada al móvil")
+	}))
 	mux.HandleFunc("/lan/video/", s.lanAuth(func(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = "/video/" + strings.TrimPrefix(r.URL.Path, "/lan/video/")
 		s.lib.serveVideo(w, r)

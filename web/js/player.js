@@ -45,7 +45,7 @@ const Player = (() => {
   const menu = h('div.menu', { hidden: true });
   // en el móvil, como YouTube: los botones grandes en el centro, subtítulos y ajustes arriba,
   // y una rayita del progreso siempre a la vista
-  const mBack = h('button.ib.mc', { 'aria-label': 'Atrás 10 segundos' }, h('span.ten', null, '10'), icon('refresh', 'rev'));
+  const mBack = h('button.ib.mc', { 'aria-label': 'Vídeo anterior' }, icon('prev'));
   const mPlay = h('button.ib.mc.mbig', { 'aria-label': 'Reproducir' }, icon('play'));
   const mNext = h('button.ib.mc', { 'aria-label': 'Siguiente' }, icon('next'));
   const center = h('div.mcenter', null, mBack, mPlay, mNext);
@@ -54,7 +54,9 @@ const Player = (() => {
   const mAuto = h('button.ib.mauto', { 'aria-label': 'Reproducción automática', title: 'Reproducción automática' }, h('span.sw2'));
   const topR = h('div.mtop', null, mAuto, mCC, mGear);
   const thin = h('div.thin', null, h('i'));
-  const x2 = h('div.x2', null, '2× ▶▶');
+  const x2 = h('div.x2', null, h('b', null, '2×'), h('span.chev', null, h('i'), h('i'), h('i')));
+  const ripIn = side => h('div', null, h('span.chev' + (side < 0 ? '.rev' : ''), null, h('i'), h('i'), h('i')), h('b'));
+  ripL.append(ripIn(-1)); ripR.append(ripIn(1));
   const el = h('div.player.paused', { tabindex: 0 }, video, poster, audioMode, h('div.shade.topshade'), h('div.shade'), ripL, ripR, ptitle, big, loading, hud, center, topR, ctrls, thin, x2, menu);
   el.append(audio);
   audio.hidden = true;
@@ -71,6 +73,10 @@ const Player = (() => {
   let tries = 0, loadSeq = 0, histDone = false, ytMarked = false, startedAt = 0;
   let audioOnly = false, subsOn = false, subTracks = [], curSub = null;
   let sleep = null;       // { end: ms | 'video', action }
+  let twin = false;       // en segundo plano: el sonido sigue por su cuenta (el vídeo, en pausa)
+  let pendingStart = 0;
+  const backStack = [];   // lo que viste antes (botón «anterior»)
+  let goingBack = false;
   const master = () => split ? audio : video;
 
   const keyOf = it => it ? (it.src === 'local' ? it.key : 'yt:' + it.id) : '';
@@ -80,9 +86,11 @@ const Player = (() => {
   /* ---------- abrir ---------- */
   async function open(it, opts = {}) {
     const seq = ++loadSeq;
+    if (item && !goingBack && keyOf(item) !== keyOf(it)) { backStack.push(item); if (backStack.length > 30) backStack.shift(); }
+    goingBack = false;
     stopAll();
     item = { ...it };
-    info = null; split = false; compat = false; cacheP = 0; offset = 0; tries = 0; histDone = false; ytMarked = false; startedAt = 0;
+    info = null; split = false; twin = false; pendingStart = 0; compat = false; cacheP = 0; offset = 0; tries = 0; histDone = false; ytMarked = false; startedAt = 0;
     ab = { a: null, b: null }; updateAB();
     clearErr(); hideResume(); hideNextUp();
     el.classList.remove('started');
@@ -121,12 +129,13 @@ const Player = (() => {
     const lid = item.lid;
     let native = item.native !== false;
     if (item.remote) { // del PC, viéndolo en el móvil
-      video.src = item.remote; setStart(start); playMaybe(); return;
+      video.src = item.remote; setStart(start); playMaybe(); twinIfHidden(); return;
     }
     if (native) {
       video.src = '/video/' + lid;
       setStart(start);
       playMaybe();
+      twinIfHidden();
     } else startCompat(start);
     // subtítulos de al lado o de dentro
     api('/api/subs/' + lid).then(list => {
@@ -212,7 +221,8 @@ const Player = (() => {
   function applyQuality(start, keepTime) {
     cacheP = 0;
     const t = keepTime ? now() : start;
-    const wasSplit = split;
+    const wasSplit = split && !twin;
+    twin = false;
     split = !!qual.a;
     const vs = '/ytstream/' + item.id + '/' + qual.v.id;
     if (split) {
@@ -229,8 +239,10 @@ const Player = (() => {
     }
     applyVolume(); applySpeed();
     playMaybe();
+    if (!split) twinIfHidden();
   }
   function setStart(t, m = video) {
+    if (m === video) pendingStart = t || 0;
     if (!t) return;
     const go = () => { try { m.currentTime = t; } catch {} };
     if (m.readyState >= 1) go(); else m.addEventListener('loadedmetadata', go, { once: true });
@@ -241,6 +253,21 @@ const Player = (() => {
     if (p && p.catch) p.catch(e => { if (e.name === 'NotAllowedError') { want = false; setPlayIcon(); } });
     if (split && !audioOnly && !bgHidden()) video.play().catch(() => {});
   }
+
+  // con la app en segundo plano (o la pantalla apagada), el móvil para los
+  // vídeos: el sonido pasa a seguir solo y la imagen se pone al día al volver
+  function goTwin() {
+    if (split || compat || !item || !video.getAttribute('src')) return;
+    const t = video.readyState >= 1 ? video.currentTime : pendingStart;
+    twin = true; split = true;
+    audio.src = video.getAttribute('src');
+    setStart(t, audio);
+    applyVolume(); applySpeed();
+    if (want) audio.play().catch(() => {});
+    holding = false;
+    video.pause();
+  }
+  function twinIfHidden() { if (ANDROID && bgHidden() && Settings.get().bgPlay !== false) goTwin(); }
 
   /* ---------- subtítulos ---------- */
   function addTracks() {
@@ -303,6 +330,7 @@ const Player = (() => {
   }, 200);
   // en segundo plano solo el sonido; al volver, la imagen en su sitio
   document.addEventListener('visibilitychange', () => {
+    if (!split && want) twinIfHidden();
     if (!split || audioOnly) return;
     if (bgHidden()) { holding = false; video.pause(); }
     else if (want) { try { video.currentTime = audio.currentTime; } catch {} video.play().catch(() => {}); }
@@ -310,7 +338,7 @@ const Player = (() => {
 
   /* ---------- eventos del que manda ---------- */
   for (const m of [video, audio]) {
-    m.addEventListener('playing', () => { if (m !== master()) return; el.classList.add('started'); el.classList.remove('waiting'); setPlayIcon(); if (!startedAt) startedAt = Date.now(); nativeNow(); });
+    m.addEventListener('playing', () => { if (m !== master()) return; el.classList.add('started'); el.classList.remove('waiting'); setPlayIcon(); if (!startedAt) { startedAt = Date.now(); if (!el.classList.contains('idle')) wake(2500); } nativeNow(); });
     m.addEventListener('pause', () => { if (m !== master() || holding) return; setPlayIcon(); savePos(true); nativeNow(); });
     m.addEventListener('waiting', () => { if (m === master()) el.classList.add('waiting'); });
     m.addEventListener('canplay', () => { if (m === master()) el.classList.remove('waiting'); });
@@ -324,6 +352,7 @@ const Player = (() => {
 
   function onError(m) {
     if (!item || !m.getAttribute('src')) return;
+    if (twin && m === audio) { console.warn('segundo plano: el sonido solo no pudo seguir'); return; }
     const code = m.error ? m.error.code : 0;
     console.warn('error del vídeo', code, m.error && m.error.message);
     if (item.src === 'local' && !compat && !item.remote) {
@@ -334,7 +363,7 @@ const Player = (() => {
     if (item.src === 'yt' && info) {
       tries++;
       const t = now();
-      if (tries === 1 && split) { // con imagen y sonido juntos (360p)
+      if (tries === 1 && split && !twin) { // con imagen y sonido juntos (360p)
         const mux = info.formats.filter(f => f.kind === 'av' && codecOK(f)).sort((x, y) => (y.h || 0) - (x.h || 0))[0];
         if (mux) { qual = { v: mux, a: null, h: mux.h }; applyQuality(t); return; }
       }
@@ -442,6 +471,14 @@ const Player = (() => {
     const n = queue.shift();
     if (n) M4.emit('player:next', n);
   }
+  // «anterior», como YouTube: al principio del vídeo o, si ya va avanzado, vuelve a empezar
+  function prev() {
+    if (now() > 4 || !backStack.length) { seek(0); M4.haptic('tick'); return; }
+    hideNextUp();
+    const p = backStack.pop();
+    goingBack = true;
+    M4.emit('player:next', p);
+  }
   function setQueue(list) { queue = (list || []).filter(Boolean); }
 
   function applyVolume() {
@@ -499,8 +536,8 @@ const Player = (() => {
   /* ---------- botones ---------- */
   bPlay.onclick = e => { e.stopPropagation(); toggle(); };
   mPlay.onclick = e => { e.stopPropagation(); toggle(); wake(); };
-  mBack.onclick = e => { e.stopPropagation(); skip(-10); wake(); };
-  mNext.onclick = e => { e.stopPropagation(); if (queue[0]) next(); else skip(10); };
+  mBack.onclick = e => { e.stopPropagation(); prev(); wake(); };
+  mNext.onclick = e => { e.stopPropagation(); M4.haptic('tap'); if (queue[0]) next(); else toast('No hay siguiente'); wake(); };
   mCC.onclick = e => { e.stopPropagation(); toggleSubs(); mCC.classList.toggle('on', curSub != null); };
   mGear.onclick = e => { e.stopPropagation(); menu.hidden ? openMenu('main') : closeMenu(); };
   const paintAuto = () => mAuto.classList.toggle('on', !!Settings.get().autoplay);
@@ -672,12 +709,15 @@ const Player = (() => {
   function onPip(on) { document.body.classList.toggle('pip', !!on); }
 
   /* ---------- toques y ratón ---------- */
+  const coarse = matchMedia('(pointer: coarse)').matches || ANDROID;
   let idleT = 0;
-  function wake() { el.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => { if (menu.hidden) el.classList.add('idle'); }, ANDROID ? 3500 : 2600); }
-  el.addEventListener('mousemove', wake);
-  el.addEventListener('touchcancel', () => { endHold(); swipe = null; el.style.transform = ''; hud.classList.remove('scrub'); });
+  // los botones se quedan a la vista un buen rato (como YouTube) y se van con calma
+  function wake(ms) { el.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => { if (menu.hidden && !dragging) el.classList.add('idle'); else wake(); }, ms || (coarse ? 4500 : 2600)); }
+  function hideCtl() { clearTimeout(idleT); el.classList.add('idle'); }
+  const ctlShown = () => !el.classList.contains('idle');
+  el.addEventListener('mousemove', () => { if (!touchMode) wake(); });
   el.addEventListener('mouseleave', () => { if (!master().paused) el.classList.add('idle'); });
-  let lastTap = 0, tapSide = 0, tapAcc = 0, tapT = 0, touchMode = false;
+  let touchMode = false;
   el.addEventListener('click', e => {
     if (touchMode) return;
     if (!menu.hidden) { closeMenu(); return; }
@@ -686,101 +726,167 @@ const Player = (() => {
     toggle();
   });
   el.addEventListener('dblclick', e => { if (!touchMode && !el.closest('#mini')) toggleFS(); });
-  // en el móvil: un toque enseña/oculta los botones; dos toques a un lado, ±10 s;
-  // deslizar arriba/abajo a la izquierda es el brillo y a la derecha el volumen
-  let sx = 0, sy = 0, swipe = null, startVal = 0, holdT = 0, held = false, holdRate = 1, scrubFrom = 0, scrubTo = 0;
+
+  // en el móvil, los gestos de YouTube:
+  //  · un toque: enseña u oculta los botones
+  //  · dos toques a la izquierda o a la derecha: −10 / +10 s (y cada toque más, otros 10)
+  //  · mantener pulsado: a 2× mientras no sueltes
+  //  · deslizar hacia abajo: el vídeo baja y se queda pequeño (sigue sonando)
+  //  · deslizar hacia arriba: pantalla completa; en pantalla completa, hacia abajo la quita
+  //  · pellizcar en pantalla completa: llenar la pantalla o verlo entero
+  const SKIP_ZONE = 0.4;
+  let sx = 0, sy = 0, st = 0, ly = 0, lt = 0, vy = 0, swipe = null, holdT = 0, held = false, holdRate = 1, scrubFrom = 0, scrubTo = 0;
+  let lastTap = 0, lastSide = 0, seekMode = 0, seekAcc = 0, seekT = 0, tapT = 0, pinch0 = 0, pinchK = 1;
+  const BLOCK = '.ctrls button,.ctrls .bar,.ctrls .tag,.menu,.perr,.resume,.next-up,.audiomode,.mcenter button,.mtop';
   const endHold = () => { clearTimeout(holdT); if (held) { held = false; for (const m of [video, audio]) m.playbackRate = holdRate; el.classList.remove('speedup'); } };
+  const watchView = () => el.closest('.watch');
+  const resetDrag = (animate) => {
+    const wv = watchView();
+    for (const x of [el, wv]) if (x) {
+      x.style.transition = animate ? 'transform .28s cubic-bezier(.2,.9,.3,1.15), opacity .2s' : '';
+      x.style.transform = ''; x.style.opacity = '';
+      if (animate) setTimeout(() => { x.style.transition = ''; }, 300);
+    }
+    document.body.classList.remove('dragdown');
+  };
+  el.addEventListener('touchcancel', () => { endHold(); swipe = null; resetDrag(true); hud.classList.remove('scrub'); });
   el.addEventListener('touchstart', e => {
     touchMode = true;
-    if (e.target.closest('.ctrls,.menu,.perr,.resume,.next-up,.mcenter,.mtop')) return;
+    if (e.touches.length === 2) { clearTimeout(holdT); endHold(); swipe = 'pinch'; pinch0 = dist(e.touches); pinchK = 1; return; }
+    if (e.target.closest(BLOCK)) { swipe = 'x'; return; }
     const t = e.touches[0];
-    sx = t.clientX; sy = t.clientY; swipe = null;
-    // mantener pulsado: a 2× mientras no sueltes (como YouTube)
+    sx = t.clientX; sy = t.clientY; ly = sy; st = lt = Date.now(); vy = 0; swipe = null;
     clearTimeout(holdT);
+    if (seekMode) return;
     holdT = setTimeout(() => {
       if (swipe || !item || el.closest('#mini') || !want) return;
       held = true; holdRate = rate;
       for (const m of [video, audio]) m.playbackRate = 2;
       el.classList.add('speedup');
+      hideCtl();
       M4.haptic('long');
-    }, 480);
+    }, 450);
   }, { passive: true });
+  const dist = ts => Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
   el.addEventListener('touchmove', e => {
-    if (e.target.closest('.ctrls,.menu')) return;
-    const t = e.touches[0], dy = sy - t.clientY, dx = t.clientX - sx;
+    if (swipe === 'pinch') { if (e.touches.length === 2) { e.preventDefault(); pinchK = dist(e.touches) / (pinch0 || 1); if (isFS()) video.style.transform = `scale(${Math.max(.85, Math.min(1.25, pinchK))})`; } return; }
+    if (swipe === 'x' || e.target.closest('.bar,.menu')) return;
+    const t = e.touches[0], dy = t.clientY - sy, dx = t.clientX - sx;
+    const n = Date.now(); if (n > lt) { vy = (t.clientY - ly) / (n - lt); ly = t.clientY; lt = n; }
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) clearTimeout(holdT);
-    if (held) return;
+    if (held || el.closest('#mini')) return;
     // deslizar a los lados: adelantar o atrasar (con la vista del tiempo)
-    if ((swipe === 'scrub' || (!swipe && Math.abs(dx) > 22 && Math.abs(dx) > Math.abs(dy) * 1.6)) && item && total()) {
+    if ((swipe === 'scrub' || (!swipe && Math.abs(dx) > 24 && Math.abs(dx) > Math.abs(dy) * 1.7)) && item && total()) {
       e.preventDefault();
-      if (swipe !== 'scrub') { swipe = 'scrub'; scrubFrom = now(); M4.haptic('tick'); }
+      if (swipe !== 'scrub') { swipe = 'scrub'; scrubFrom = now(); M4.haptic('tick'); wake(); }
       const span = Math.max(60, Math.min(total(), 600));
       scrubTo = Math.max(0, Math.min(total() - 1, scrubFrom + dx / el.clientWidth * span));
       hud.classList.add('scrub');
       showHud(dx < 0 ? 'prev' : 'next', dur(scrubTo) + '  (' + (dx < 0 ? '−' : '+') + dur(Math.abs(scrubTo - scrubFrom)) + ')');
-      fill.style.width = (scrubTo / total() * 100) + '%';
+      fill.style.width = (scrubTo / total() * 100) + '%'; knob.style.left = fill.style.width;
       return;
     }
-    if (!isFS()) {
-      // como YouTube: deslizar hacia abajo lo minimiza, hacia arriba pantalla completa
-      if (el.closest('.watch') && Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { e.preventDefault(); swipe = dy < 0 ? 'down' : 'up'; el.style.transform = dy < 0 ? `translateY(${Math.min(120, -dy) * 0.6}px) scale(${1 - Math.min(120, -dy) / 900})` : ''; }
+    if (!swipe && Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) swipe = dy > 0 ? 'down' : 'up';
+    if (swipe !== 'down' && swipe !== 'up') return;
+    e.preventDefault();
+    if (isFS()) {
+      // en pantalla completa el vídeo sigue al dedo
+      el.style.transition = '';
+      el.style.transform = `translateY(${dy * 0.5}px)`;
       return;
     }
-    if (!Settings.get().gestures) return;
-    if (!swipe && Math.abs(dy) > 18 && Math.abs(dy) > Math.abs(dx) * 1.5) {
-      const r = el.getBoundingClientRect();
-      swipe = (sx - r.left) < r.width / 2 ? 'bright' : 'vol';
-      startVal = swipe === 'vol' ? (ANDROID ? safe(() => A.getVolume(), 0.5) : +Settings.get().volume) : (ANDROID ? safe(() => A.getBrightness(), 0.5) : 1);
-    }
-    if (swipe === 'vol' || swipe === 'bright') {
-      e.preventDefault();
-      const v = Math.max(0, Math.min(1, startVal + dy / (el.clientHeight * 0.8)));
-      if (swipe === 'vol') { if (ANDROID) { try { A.setVolume(v); } catch {} showHud('vol', Math.round(v * 100) + '%'); } else setVolume(v); }
-      else { if (ANDROID) try { A.setBrightness(v); } catch {} else video.style.filter = `brightness(${0.3 + v * 0.7})`; showHud('palette', 'Brillo ' + Math.round(v * 100) + '%'); }
+    const wv = watchView();
+    if (dy > 0 && wv) {
+      // hacia abajo: toda la página del vídeo baja contigo y el vídeo encoge
+      const H = innerHeight, k = Math.min(1, dy / (H * 0.6));
+      wv.style.transition = '';
+      wv.style.transform = `translateY(${dy}px)`;
+      wv.style.opacity = String(1 - k * 0.55);
+      el.style.transform = `scale(${1 - k * 0.35})`; el.style.transformOrigin = '100% 0';
+      document.body.classList.add('dragdown');
+    } else if (dy < 0) {
+      el.style.transition = '';
+      el.style.transform = `scale(${1 + Math.min(0.08, -dy / 1500)})`; el.style.transformOrigin = '50% 50%';
     }
   }, { passive: false });
   el.addEventListener('touchend', e => {
     clearTimeout(holdT);
+    if (swipe === 'pinch') {
+      if (e.touches.length) return;
+      swipe = null; video.style.transform = '';
+      if (isFS() && (pinchK > 1.12 || pinchK < 0.9)) setFill(pinchK > 1);
+      return;
+    }
     if (held) { endHold(); return; }
     if (swipe === 'scrub') { swipe = null; hud.classList.remove('scrub'); seek(scrubTo); M4.haptic('tap'); return; }
     if (swipe === 'down' || swipe === 'up') {
-      const t = e.changedTouches[0], dy = t.clientY - sy;
-      el.style.transform = '';
-      const w = swipe; swipe = null;
-      if (w === 'down' && dy > 70) { M4.haptic('tick'); M4.emit('player:minimize'); }
-      else if (w === 'up' && dy < -60) toggleFS(true);
+      const t = e.changedTouches[0], dy = t.clientY - sy, w = swipe;
+      swipe = null;
+      if (isFS()) {
+        resetDrag(true);
+        if (w === 'down' && (dy > 90 || vy > 0.6)) { M4.haptic('tick'); toggleFS(false); }
+        return;
+      }
+      if (w === 'down' && (dy > innerHeight * 0.22 || (vy > 0.55 && dy > 40))) {
+        // se va hacia abajo del todo y se queda en el mini reproductor
+        M4.haptic('tick');
+        const wv = watchView();
+        if (wv) {
+          wv.style.transition = 'transform .22s cubic-bezier(.4,0,1,1), opacity .22s';
+          wv.style.transform = `translateY(${innerHeight}px)`; wv.style.opacity = '0';
+        }
+        setTimeout(() => {
+          el.style.transform = ''; el.style.transition = ''; document.body.classList.remove('dragdown');
+          M4.emit('player:minimize');
+          setTimeout(() => { if (wv && wv.isConnected) resetDrag(true); }, 700);
+        }, 200);
+      } else if (w === 'up' && (dy < -60 || vy < -0.6)) { resetDrag(false); toggleFS(true); }
+      else resetDrag(true);
       return;
     }
     if (swipe) { swipe = null; return; }
-    if (e.target.closest('.ctrls,.menu,.perr,.resume,.next-up,.audiomode,.mcenter,.mtop')) return;
     if (el.closest('#mini')) { M4.emit('player:expand'); return; }
     if (!menu.hidden) { closeMenu(); return; }
     const t = e.changedTouches[0];
     if (Math.abs(t.clientX - sx) > 20 || Math.abs(t.clientY - sy) > 20) return;
     const r = el.getBoundingClientRect();
     const x = (t.clientX - r.left) / r.width;
-    const side = x < 0.35 ? -1 : x > 0.65 ? 1 : 0;
-    const nowT = Date.now();
-    if (side && nowT - lastTap < 320 && tapSide === side) {
-      // doble toque (o más): ±10 s cada uno
-      clearTimeout(tapT);
-      tapAcc += 10;
-      skip(side * 10);
-      M4.haptic('tick');
-      const rp = side < 0 ? ripL : ripR;
-      rp.textContent = (side < 0 ? '« −' : '+') + tapAcc + ' s' + (side > 0 ? ' »' : '');
-      rp.classList.remove('show'); void rp.offsetWidth; rp.classList.add('show');
-      lastTap = nowT;
-      return;
-    }
-    tapAcc = 0; lastTap = nowT; tapSide = side;
+    const side = x < SKIP_ZONE ? -1 : x > 1 - SKIP_ZONE ? 1 : 0;
+    const n = Date.now();
+    // ya saltando: cada toque en el mismo lado son otros 10 s
+    if (seekMode && side === seekMode) { clearTimeout(tapT); doSkip(side); return; }
+    if (side && side === lastSide && n - lastTap < 300) { clearTimeout(tapT); doSkip(side); return; }
+    seekMode = 0;
+    lastTap = n; lastSide = side;
     clearTimeout(tapT);
-    tapT = setTimeout(() => {
-      if (el.classList.contains('idle') || master().paused) wake(); else el.classList.add('idle');
-    }, side ? 300 : 0);
+    // un toque: enseñar u ocultar los botones (en los lados espera un poco, por si es doble)
+    const single = () => { if (ctlShown() && !el.classList.contains('paused')) hideCtl(); else wake(); };
+    if (side) tapT = setTimeout(single, 280); else single();
   });
-  const safe = (fn, d) => { try { const v = fn(); return v == null || isNaN(v) ? d : +v; } catch { return d; } };
-  [ctrls, center, topR].forEach(x => x.addEventListener('touchstart', wake, { passive: true }));
+  function doSkip(side) {
+    if (!item) return;
+    if (seekMode !== side) { seekMode = side; seekAcc = 0; }
+    seekAcc += 10;
+    skip(side * 10);
+    hideCtl();
+    M4.haptic('tick');
+    const rp = side < 0 ? ripL : ripR, other = side < 0 ? ripR : ripL;
+    other.classList.remove('show', 'on');
+    rp.querySelector('b').textContent = seekAcc + ' segundos';
+    rp.classList.add('on');
+    rp.classList.remove('show'); void rp.offsetWidth; rp.classList.add('show');
+    clearTimeout(seekT);
+    seekT = setTimeout(() => { seekMode = 0; seekAcc = 0; lastSide = 0; rp.classList.remove('on'); }, 750);
+  }
+  function setFill(on) {
+    el.classList.toggle('fill', on);
+    Settings.set({ fillScreen: on }, true);
+    M4.haptic('tick');
+    showHud(on ? 'expand' : 'fsx', on ? 'Ampliado para llenar la pantalla' : 'Tamaño original');
+  }
+  el.classList.toggle('fill', Settings.get().fillScreen !== false);
+  M4.on('settings', pt => { if (pt && 'fillScreen' in pt) el.classList.toggle('fill', !!pt.fillScreen); if (pt && 'autoPip' in pt) M4.emit('watching'); });
+  [ctrls, center, topR].forEach(x => x.addEventListener('touchstart', () => wake(), { passive: true }));
 
   /* ---------- teclado ---------- */
   document.addEventListener('keydown', e => {
