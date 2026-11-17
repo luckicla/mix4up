@@ -265,6 +265,7 @@ const M4 = (() => {
     return { path, q: new URLSearchParams(qs || ''), raw };
   }
   let renderSeq = 0, lastPath = '', enterT = 0;
+  const tabIndex = p => p === '/' ? 0 : p === '/subs' ? 1 : p === '/local' ? 2 : /^\/(library|history|later|likes|lists|downloads)$/.test(p) ? 3 : -1;
   async function render() {
     const r = parseHash();
     const seq = ++renderSeq;
@@ -274,6 +275,9 @@ const M4 = (() => {
         const v = $('#view'), was = lastPath;
         lastPath = r.path;
         if (v && innerWidth <= 760 && !(r.path === '/watch' && was === '/watch')) {
+          // entre pestañas de abajo, la página entra por el lado hacia el que vas
+          const a = tabIndex(was), b = tabIndex(r.path);
+          v.dataset.dir = a >= 0 && b >= 0 && a !== b ? (b > a ? 'r' : 'l') : '';
           v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter');
           clearTimeout(enterT); enterT = setTimeout(() => v.classList.remove('enter'), 450);
         }

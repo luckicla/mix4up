@@ -56,14 +56,19 @@ const Views = (() => {
   }
   function card(it, opts = {}) {
     if (it.type === 'channel') {
-      return h('a.chan-card', { href: '#/channel/' + it.id }, h('img', { src: it.thumb, alt: '', loading: 'lazy' }),
+      const cc = h('a.chan-card', { href: '#/channel/' + it.id }, h('img', { src: it.thumb, alt: '', loading: 'lazy' }),
         h('div', null, h('h3', null, it.title), h('div.muted', null, [it.handle, it.subs].filter(Boolean).join(' · ')), it.desc ? h('div.muted', { style: { fontSize: '12px', marginTop: '6px' } }, it.desc) : ''));
+      cc._menu = a => channelMenu(it.id, it.title, a);
+      return cc;
     }
     if (it.type === 'playlist') {
       const href = it.local ? '#/list/' + it.id : '#/playlist?list=' + encodeURIComponent(it.id);
-      return h('div.card.pl-stack', null,
+      const pc = h('div.card.pl-stack', null,
         h('a.thumb', { href }, it.thumb ? h('img', { src: it.thumb, alt: '', loading: 'lazy' }) : h('div.ph', null, icon('list')), h('div.count', null, icon('list'), h('div', null, it.count || ''))),
         h('div.meta', null, h('div.t', null, h('a', { href }, h('h3', null, it.title || 'Lista')), h('div.sub', null, it.channel || (it.local ? 'Lista de Mix4Up' : 'Lista')))));
+      pc._menu = a => M4.popMenu(a, [{ icon: 'list', label: 'Abrir la lista', fn: () => { location.hash = href; } },
+        !it.local ? { icon: 'link', label: 'Copiar enlace', fn: () => M4.copy('https://www.youtube.com/playlist?list=' + it.id) } : null]);
+      return pc;
     }
     const key = it.key || (it.src === 'local' ? it.key : 'yt:' + it.id);
     const w = Journal.watched(key);
@@ -89,6 +94,7 @@ const Views = (() => {
         h('div.t', null, h('a', { href }, h('h3', { title: it.title }, it.title)), h('div.sub', null, chLink, subline ? h('span.sl', null, subline) : ''),
           it.desc && opts.desc ? h('div.desc', null, it.desc) : '')),
       more);
+    card._menu = a => itemMenu(it, a && a.x != null ? { ...a, closest: sel => card.closest(sel) } : a || more, { ...opts, ctx: true });
     if (it.src === 'yt' && it.id) {
       // el ratón encima (o el dedo): se prepara, y al entrar empieza al momento
       let t = 0;
@@ -152,6 +158,12 @@ const Views = (() => {
     const key = it.key || (it.src === 'local' ? it.key : 'yt:' + it.id);
     const m = Journal.meta(it);
     const items = [];
+    if (opts.ctx) {
+      // (con clic derecho o manteniendo pulsado: también abrirlo)
+      items.push({ icon: 'play', label: 'Ver ahora', fn: () => { location.hash = watchHref(it, opts.list); } });
+      if (Player.item && it.src === 'yt') items.push({ icon: 'next', label: 'Ver después del que suena', fn: () => { Player.queueNext && Player.queueNext(it); toast('Lo verás después de este'); } });
+      items.push('-');
+    }
     if (it.src !== 'local' || it.key.startsWith('yt:')) {
       items.push({ icon: 'later', label: Journal.isOn('wl', key) ? 'Quitar de Ver más tarde' : 'Guardar en Ver más tarde', fn: () => toggleLater(it) });
     }
@@ -170,6 +182,10 @@ const Views = (() => {
       items.push({ icon: 'trash', label: 'Borrar del disco…', fn: () => deleteLocal(it) });
     }
     M4.popMenu(anchor, items);
+  }
+  function channelMenu(id, title, anchor) {
+    M4.popMenu(anchor, [{ icon: 'user', label: 'Ir al canal' + (title ? ' ' + title : ''), fn: () => go('/channel/' + id) },
+      { icon: 'link', label: 'Copiar enlace del canal', fn: () => M4.copy('https://www.youtube.com/' + (id.startsWith('@') ? id : 'channel/' + id)) }]);
   }
   function refreshCard(key) {
     for (const c of document.querySelectorAll(`.card[data-key="${CSS.escape(key)}"] .prog`)) c.remove();
@@ -463,7 +479,11 @@ const Views = (() => {
     await YT.account();
     const box = setView('');
     const conn = YT.connected();
-    box.append(h('div.you', null, h('div.ava', null, icon('user')), h('div', null, h('h1', null, 'Tú'), h('small', null, conn ? 'Cuenta de YouTube conectada' : 'Sin cuenta de YouTube'),
+    const me = conn ? YT.meCached() : null;
+    const ava = h('div.ava' + (me ? '.face' : ''), null, me ? h('img', { src: me.photo, alt: '', referrerpolicy: 'no-referrer' }) : icon('user'));
+    const nm = h('h1', null, me && me.name ? me.name : 'Tú'), hd = h('small', null, conn ? (me && me.handle ? me.handle + ' · ' : '') + 'Cuenta de YouTube conectada' : 'Sin cuenta de YouTube');
+    if (conn && !me) YT.me().then(m => { if (!m || !ava.isConnected) return; ava.classList.add('face'); ava.replaceChildren(h('img', { src: m.photo, alt: '', referrerpolicy: 'no-referrer' })); nm.textContent = m.name || 'Tú'; hd.textContent = (m.handle ? m.handle + ' · ' : '') + 'Cuenta de YouTube conectada'; });
+    box.append(h('div.you', null, ava, h('div', null, nm, hd,
       !conn ? h('div', { style: { marginTop: '6px' } }, h('button.btn.acc', { onclick: () => SettingsPage.connect() }, 'Conectar con YouTube')) : '')));
     const hist = Journal.all('hist').slice(0, 15).map(e => fromMeta({ ...(e.v || {}), key: e.k })).filter(Boolean);
     const shelf = (title, href, items) => h('section.shelf', null, h('div.pagehead', { style: { margin: '14px 12px 10px' } }, h('h2', { style: { flex: 1 } }, title), href ? h('a.btn.ghost', { href }, 'Ver todo') : ''),
@@ -733,5 +753,5 @@ const Views = (() => {
     box.replaceChildren(...(list.length ? [h('h4', null, 'Suscripciones'), ...list.slice(0, 12).map(c => h('a.sub', { href: '#/channel/' + c.id }, c.thumb ? h('img', { src: c.thumb, alt: '', loading: 'lazy' }) : icon('user'), h('span', null, c.title))), h('hr')] : []));
   }
 
-  return { preloadHome, card, grid, infinite, skeleton, loadLocal, localCopy, localItem, download, itemMenu, sideSubs, toggleLater, saveToList, watchCtx: () => watchCtx, local: () => local };
+  return { preloadHome, card, grid, infinite, skeleton, loadLocal, localCopy, localItem, download, itemMenu, channelMenu, sideSubs, toggleLater, saveToList, watchCtx: () => watchCtx, local: () => local };
 })();

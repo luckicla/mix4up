@@ -42,7 +42,7 @@ const Player = (() => {
   const row = h('div.row', null, bPlay, bNext, h('span.volwrap', null, bMute, h('span.vol', null, volIn)), time,
     h('span.grow'), tagTimer, tagAB, tagSpeed, bCC, bGear, bPip, bTheater, bFS);
   const ctrls = h('div.ctrls', null, bar, row);
-  const menu = h('div.menu', { hidden: true });
+  const menu = h('div.menu.pm', { hidden: true, role: 'menu' });
   // en el móvil, como YouTube: los botones grandes en el centro, subtítulos y ajustes arriba,
   // y una rayita del progreso siempre a la vista
   const mBack = h('button.ib.mc', { 'aria-label': 'Vídeo anterior' }, icon('prev'));
@@ -72,7 +72,8 @@ const Player = (() => {
   let queue = [];         // lo siguiente
   let tries = 0, loadSeq = 0, histDone = false, ytMarked = false, startedAt = 0;
   let audioOnly = false, subsOn = false, subTracks = [], curSub = null;
-  let sleep = null;       // { end: ms | 'video', action }
+  let sleep = null;       // { end: ms | 'video', len: ms }
+  let loopOne = false;    // repetir este vídeo una y otra vez
   let twin = false;       // en segundo plano: el sonido sigue por su cuenta (el vídeo, en pausa)
   let pendingStart = 0;
   const backStack = [];   // lo que viste antes (botón «anterior»)
@@ -386,7 +387,7 @@ const Player = (() => {
     const playing = want && (!master().paused || holding);
     el.classList.toggle('paused', !playing);
     bPlay.replaceChildren(icon(playing ? 'pause' : 'play'));
-    mPlay.replaceChildren(icon(playing ? 'pause' : 'play'));
+    if (mPlay.dataset.st !== String(playing)) { mPlay.dataset.st = String(playing); mPlay.replaceChildren(icon(playing ? 'pause' : 'play', 'morph')); }
     bPlay.setAttribute('aria-label', playing ? 'Pausar' : 'Reproducir');
     if (ANDROID) try { A.setKeepScreenOn(playing && !audioOnly); } catch {}
   }
@@ -456,6 +457,7 @@ const Player = (() => {
     savePos(true);
     if (sleep && sleep.end === 'video') { fireSleep(); return; }
     if (ab.a != null && ab.b == null) { seek(ab.a); return; }
+    if (loopOne) { seek(0); play(); return; }
     if (Settings.get().autoplay && queue[0]) next();
     else { want = false; setPlayIcon(); }
   }
@@ -489,6 +491,7 @@ const Player = (() => {
     M4.emit('player:next', p);
   }
   function setQueue(list) { queue = (list || []).filter(Boolean); }
+  function queueNext(it) { if (it) { queue = queue.filter(q => q.id !== it.id); queue.unshift(it); } }
 
   function applyVolume() {
     const s = Settings.get();
@@ -548,7 +551,7 @@ const Player = (() => {
   mBack.onclick = e => { e.stopPropagation(); prev(); wake(); };
   mNext.onclick = e => { e.stopPropagation(); M4.haptic('tap'); if (queue[0]) next(); else toast('No hay siguiente'); wake(); };
   mCC.onclick = e => { e.stopPropagation(); toggleSubs(); mCC.classList.toggle('on', curSub != null); };
-  mGear.onclick = e => { e.stopPropagation(); menu.hidden ? openMenu('main') : closeMenu(); };
+  mGear.onclick = e => { e.stopPropagation(); toggleMenu(); };
   const paintAuto = () => mAuto.classList.toggle('on', !!Settings.get().autoplay);
   mAuto.onclick = e => { e.stopPropagation(); Settings.set({ autoplay: !Settings.get().autoplay }); paintAuto(); toast(Settings.get().autoplay ? 'Reproducción automática activada' : 'Reproducción automática desactivada'); };
   M4.on('ready', paintAuto); M4.on('settings', p => { if ('autoplay' in p) paintAuto(); });
@@ -559,7 +562,7 @@ const Player = (() => {
   bFS.onclick = e => { e.stopPropagation(); toggleFS(); };
   bPip.onclick = e => { e.stopPropagation(); pip(); };
   bTheater.onclick = e => { e.stopPropagation(); Settings.set({ theater: !Settings.get().theater }); };
-  bGear.onclick = e => { e.stopPropagation(); menu.hidden ? openMenu('main') : closeMenu(); };
+  bGear.onclick = e => { e.stopPropagation(); toggleMenu(); };
   tagTimer.onclick = e => { e.stopPropagation(); openMenu('sleep'); };
   tagAB.onclick = e => { e.stopPropagation(); ab = { a: null, b: null }; updateAB(); toast('Tramo quitado'); };
   tagSpeed.onclick = e => { e.stopPropagation(); openMenu('speed'); };
@@ -567,55 +570,136 @@ const Player = (() => {
   [ctrls, menu, center, topR].forEach(x => x.addEventListener('click', e => e.stopPropagation()));
 
   /* ---------- menú del vídeo ---------- */
-  let menuClose = null;
-  function closeMenu() { menu.hidden = true; if (menuClose) { menuClose(); menuClose = null; } }
-  function openMenu(which) {
-    menu.replaceChildren();
-    menu.hidden = false;
-    if (!menuClose) menuClose = M4.pushClose(closeMenu);
-    const back = title => h('h5', { onclick: () => openMenu('main') }, icon('back'), title);
-    const opt = (label, sel, fn, v) => h('button', { class: sel ? 'sel' : '', onclick: fn }, h('span', null, label), v ? h('span.v', null, v) : '');
+  // En el PC, una ventanita encima del vídeo. En el móvil, una hoja que sube desde
+  // abajo (fuera del vídeo si es pequeño, dentro si está en pantalla completa).
+  // Cada submenú entra deslizándose y «atrás» vuelve deslizándose al revés.
+  let menuClose = null, menuOpen = false, menuOutT = 0, sleepUpd = 0, menuLevel = 0;
+  const pscrim = h('div.pscrim', { hidden: true, onclick: e => { e.stopPropagation(); closeMenu(); } });
+  const sheetMode = () => coarseUI() && !isFS();
+  const coarseUI = () => innerWidth <= 760 || matchMedia('(pointer: coarse)').matches;
+  function placeMenu() {
+    const sheet = coarseUI();
+    menu.classList.toggle('sheet', sheet);
+    pscrim.classList.toggle('in-player', sheet && !sheetMode());
+    const host = sheetMode() ? document.body : el;
+    if (sheet) { if (pscrim.parentNode !== host) host.append(pscrim); } else pscrim.remove();
+    if (menu.parentNode !== host) host.append(menu);
+  }
+  function closeMenu() {
+    if (!menuOpen) return;
+    menuOpen = false; clearInterval(sleepUpd);
+    if (menuClose) { menuClose(); menuClose = null; }
+    menu.classList.add('out'); pscrim.classList.add('out');
+    clearTimeout(menuOutT);
+    menuOutT = setTimeout(() => { menu.hidden = true; pscrim.hidden = true; menu.classList.remove('out'); pscrim.classList.remove('out'); menu.style.transform = ''; }, 190);
+    wake();
+  }
+  function toggleMenu() { menuOpen ? closeMenu() : openMenu('main'); }
+  // deslizar la hoja hacia abajo la cierra
+  let my0 = null;
+  menu.addEventListener('touchstart', e => { my0 = menu.classList.contains('sheet') && menu.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+  menu.addEventListener('touchmove', e => { if (my0 == null) return; const d = e.touches[0].clientY - my0; if (d > 0) { menu.style.transition = 'none'; menu.style.transform = `translateY(${d}px)`; } }, { passive: true });
+  menu.addEventListener('touchend', e => { if (my0 == null) return; const d = e.changedTouches[0].clientY - my0; my0 = null; menu.style.transition = ''; if (d > 80) closeMenu(); else menu.style.transform = ''; });
+
+  function openMenu(which, dir) {
+    clearInterval(sleepUpd);
+    clearTimeout(menuOutT);
+    const first = !menuOpen;
+    placeMenu();
+    menu.classList.remove('out'); pscrim.classList.remove('out');
+    menu.hidden = false; pscrim.hidden = !menu.classList.contains('sheet');
+    if (first) { menuOpen = true; menuClose = M4.pushClose(closeMenu); menu.classList.remove('pmpop'); void menu.offsetWidth; menu.classList.add('pmpop'); M4.haptic('tap'); }
+    menuOpen = true;
+    wake();
+    const lvl = which === 'main' ? 0 : 1;
+    const pane = h('div.pane' + (first ? '' : lvl > menuLevel || dir === 1 ? '.fwd' : lvl < menuLevel || dir === -1 ? '.bwd' : ''));
+    menuLevel = lvl;
+    menu.replaceChildren(menu.classList.contains('sheet') ? h('div.grab') : '', pane);
+    const add = (...xs) => pane.append(...xs.filter(Boolean));
+    const back = title => h('div.mhead', null, h('button.ib.mback', { 'aria-label': 'Atrás', onclick: e => { e.stopPropagation(); openMenu('main'); } }, icon('back')), h('b', null, title));
+    // una fila: icono, nombre, valor y flecha si abre otro menú
+    const row = (ic, label, v, fn, o = {}) => h('button.mrow' + (o.sel ? '.sel' : '') + (o.on != null ? '.tog' : ''), { onclick: e => { e.stopPropagation(); fn(); } },
+      ic ? icon(ic) : h('i.dot'), h('span.l', null, label), v != null && v !== '' ? h('span.v', null, v) : '',
+      o.on != null ? h('span.sw' + (o.on ? '.on' : ''), null, h('i')) : o.sub ? h('span.chev2', null, '›') : o.sel ? icon('check', 'ok') : '');
     if (which === 'main') {
-      const qLabel = item && item.src === 'yt' && qual ? (qual.auto ? 'Auto (' + qual.h + 'p)' : qual.h + 'p') : (compat ? 'Convertido' : 'Original');
-      menu.append(
-        item && item.src === 'yt' ? opt('Calidad', false, () => openMenu('quality'), qLabel) : '',
-        opt('Velocidad', false, () => openMenu('speed'), rate === 1 ? 'Normal' : rate + '×'),
-        subTracks.length ? opt('Subtítulos', false, () => openMenu('subs'), curSub != null ? subTracks[curSub].label : 'No') : '',
-        opt('Repetir un tramo (A-B)', false, () => { abStep(); closeMenu(); }, ab.a == null ? 'Marcar inicio' : ab.b == null ? 'Marcar final' : 'Quitar'),
-        opt('Temporizador para dormir', false, () => openMenu('sleep'), sleep ? sleepLabel() : 'No'),
-        split ? opt('Solo sonido', audioOnly, () => { setAudioOnly(!audioOnly); closeMenu(); }) : '',
-        item && item.src === 'yt' ? opt('Descargar', false, () => { closeMenu(); Views.download(item); }) : '',
+      const qLabel = item && item.src === 'yt' && qual ? (qual.auto ? 'Auto · ' + qual.h + 'p' : qual.h + 'p') : (compat ? 'Convertido' : 'Original');
+      add(
+        item && item.src === 'yt' ? row('hd', 'Calidad', qLabel, () => openMenu('quality'), { sub: 1 }) : '',
+        row('speed', 'Velocidad', rate === 1 ? 'Normal' : rate + '×', () => openMenu('speed'), { sub: 1 }),
+        subTracks.length ? row('cc', 'Subtítulos', curSub != null ? subTracks[curSub].label : 'No', () => openMenu('subs'), { sub: 1 }) : '',
+        row('moon', 'Temporizador para dormir', sleep ? sleepLabel() : 'No', () => openMenu('sleep'), { sub: 1 }),
+        h('div.msep'),
+        row('loop', 'Repetir este vídeo', null, () => { setLoop(!loopOne); openMenu('main'); }, { on: loopOne }),
+        row('ab', 'Repetir un tramo (A-B)', ab.a == null ? 'Marcar inicio' : ab.b == null ? 'Marcar final' : 'Quitar', () => { abStep(); closeMenu(); }),
+        split ? row('vol', 'Solo sonido', null, () => { setAudioOnly(!audioOnly); openMenu('main'); }, { on: audioOnly }) : '',
+        h('div.msep'),
+        !ANDROID || true ? row('pip', 'Imagen dentro de imagen', null, () => { closeMenu(); pip(); }) : '',
+        item && item.src === 'yt' ? row('link', 'Copiar enlace', null, () => { closeMenu(); M4.copy('https://youtu.be/' + item.id); }) : '',
+        item && item.src === 'yt' && now() > 5 ? row('later', 'Copiar enlace en ' + dur(now()), null, () => { closeMenu(); M4.copy('https://youtu.be/' + item.id + '?t=' + Math.floor(now())); }) : '',
+        item && item.src === 'yt' ? row('download', 'Descargar', null, () => { closeMenu(); Views.download(item); }) : '',
       );
     } else if (which === 'quality') {
-      menu.append(back('Calidad'));
+      add(back('Calidad'));
       const hs = heights();
-      menu.append(opt('Automática', qual && qual.auto, () => { setQuality('auto'); closeMenu(); }));
+      add(row(null, 'Automática', qual && qual.auto ? 'Ahora ' + qual.h + 'p' : 'Según la pantalla', () => { setQuality('auto'); closeMenu(); }, { sel: qual && qual.auto }));
       for (const x of hs) {
-        const f = info.formats.find(f => f.h === x && (f.fps || 0) > 30);
-        menu.append(opt(x + 'p' + (f ? (f.fps > 50 ? '60' : '') : '') + (x >= 2160 ? ' 4K' : x >= 1440 ? ' QHD' : x >= 720 ? ' HD' : ''), qual && !qual.auto && qual.h === x, () => { setQuality(String(x)); closeMenu(); }));
+        const f = info.formats.find(f => f.h === x && (f.fps || 0) > 50);
+        const tag = x >= 2160 ? '4K' : x >= 1440 ? 'QHD' : x >= 1080 ? 'Full HD' : x >= 720 ? 'HD' : '';
+        add(row(null, x + 'p' + (f ? '60' : ''), tag, () => { setQuality(String(x)); closeMenu(); }, { sel: qual && !qual.auto && qual.h === x }));
       }
     } else if (which === 'speed') {
-      menu.append(back('Velocidad'));
-      for (const r of [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]) menu.append(opt(r === 1 ? 'Normal' : r + '×', r === rate, () => { setSpeed(r); closeMenu(); }));
+      add(back('Velocidad'));
+      const big = h('div.spbig', null, rate === 1 ? 'Normal' : rate.toFixed(2).replace(/0$/, '') + '×');
+      const sl = h('input.spsl', { type: 'range', min: 0.25, max: 3, step: 0.05, value: rate, 'aria-label': 'Velocidad' });
+      const paintSp = r => { big.textContent = r === 1 ? 'Normal' : (+r).toFixed(2).replace(/0$/, '') + '×'; sl.style.setProperty('--p', ((r - 0.25) / 2.75 * 100) + '%'); chips.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.r === +r)); };
+      sl.oninput = () => { const r = Math.round(+sl.value * 20) / 20; setSpeed(r); paintSp(r); };
+      sl.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+      const step = d => { const r = Math.max(0.25, Math.min(3, Math.round((rate + d) * 20) / 20)); setSpeed(r); sl.value = r; paintSp(r); M4.haptic('tick'); };
+      const chips = h('div.spchips', null, ...[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3].map(r => h('button', { 'data-r': r, onclick: e => { e.stopPropagation(); setSpeed(r); sl.value = r; paintSp(r); M4.haptic('tick'); } }, r === 1 ? '1×' : r + '×')));
+      add(h('div.spbox', null, h('button.ib.spm', { 'aria-label': 'Más lento', onclick: e => { e.stopPropagation(); step(-0.05); } }, '−'), big, h('button.ib.spm', { 'aria-label': 'Más rápido', onclick: e => { e.stopPropagation(); step(0.05); } }, '+')), sl, chips);
+      paintSp(rate);
     } else if (which === 'subs') {
-      menu.append(back('Subtítulos'), opt('No', curSub == null, () => { setSub(-1); Settings.set({ subs: false }); closeMenu(); }));
-      subTracks.forEach((s, i) => menu.append(opt(s.label, curSub === i, () => { setSub(i); Settings.set({ subs: true, subLang: (s.lang || 'es').slice(0, 2) }); closeMenu(); })));
-      menu.append(h('h5', null, 'Tamaño'),
-        h('div', { style: { display: 'flex', gap: '6px', padding: '0 16px 8px' } }, ...[80, 100, 130, 160].map(z => h('button.tag', { style: { padding: '4px 8px' }, onclick: () => { Settings.set({ subSize: z }); applyCue(); } }, z + '%'))));
+      add(back('Subtítulos'), row(null, 'Sin subtítulos', null, () => { setSub(-1); Settings.set({ subs: false }); closeMenu(); }, { sel: curSub == null }));
+      subTracks.forEach((s, i) => add(row(null, s.label, null, () => { setSub(i); Settings.set({ subs: true, subLang: (s.lang || 'es').slice(0, 2) }); closeMenu(); }, { sel: curSub === i })));
+      const cur = Settings.get().subSize || 100;
+      add(h('div.mlabel', null, 'Tamaño de la letra'), h('div.seg', null, ...[[80, 'Pequeña'], [100, 'Normal'], [130, 'Grande'], [160, 'Enorme']].map(([z, n]) => h('button' + (cur === z ? '.on' : ''), { onclick: e => { e.stopPropagation(); Settings.set({ subSize: z }); applyCue(); openMenu('subs', 0); } }, n))));
     } else if (which === 'sleep') {
-      menu.append(back('Temporizador para dormir'));
-      if (sleep) menu.append(opt('Quitar el temporizador (' + sleepLabel() + ')', false, () => { setSleep(null); closeMenu(); }));
-      for (const m of [5, 10, 15, 30, 45, 60, 90, 120]) menu.append(opt(m + ' minutos', false, () => { setSleep(m); closeMenu(); }));
-      menu.append(opt('Al acabar este vídeo', sleep && sleep.end === 'video', () => { setSleep('video'); closeMenu(); }));
-      menu.append(opt('Otro tiempo…', false, async () => { closeMenu(); const v = await M4.prompt('¿Cuántos minutos?', '20', 'Poner'); const n = parseInt(v, 10); if (n > 0) setSleep(n); }));
-      menu.append(h('h5', null, 'Y al acabar…'));
-      const act = Settings.get().sleepAction;
-      menu.append(opt('Solo parar el vídeo', act === 'pause', () => { Settings.set({ sleepAction: 'pause' }); openMenu('sleep'); }));
-      menu.append(opt(ANDROID ? 'Parar y cerrar Mix4Up' : 'Parar y cerrar Mix4Up', act === 'close', () => { Settings.set({ sleepAction: 'close' }); openMenu('sleep'); }));
-      if (DESKTOP) menu.append(opt('Parar y apagar el PC', act === 'shutdown', () => { Settings.set({ sleepAction: 'shutdown' }); openMenu('sleep'); }));
-      if (ANDROID) menu.append(h('p', { style: { margin: '6px 16px', fontSize: '12px', color: '#bbb' } }, 'Al pararse, la pantalla del móvil se apaga sola como siempre.'));
+      add(back('Temporizador para dormir'));
+      if (sleep) {
+        const tLeft = h('b.sltime'), barI = h('i'), sub = h('small');
+        const paintLeft = () => {
+          if (!sleep) { openMenu('sleep', 0); return; }
+          tLeft.textContent = sleep.end === 'video' ? dur(Math.max(0, total() - now())) : dur(Math.max(0, (sleep.end - Date.now()) / 1000));
+          sub.textContent = sleep.end === 'video' ? 'Se para al acabar este vídeo' : 'Se para a las ' + new Date(sleep.end).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          const frac = sleep.end === 'video' ? (total() ? 1 - now() / total() : 1) : Math.max(0, (sleep.end - Date.now()) / (sleep.len || 1));
+          barI.style.width = Math.max(0, Math.min(100, frac * 100)) + '%';
+        };
+        const more = m => h('button', { onclick: e => { e.stopPropagation(); extendSleep(m); paintLeft(); M4.haptic('tick'); } }, '+' + m + ' min');
+        add(h('div.slnow', null, icon('moon', 'slmoon'), h('div', null, tLeft, sub), h('div.slbar', null, barI),
+          h('div.slbtns', null, sleep.end !== 'video' ? more(5) : '', sleep.end !== 'video' ? more(15) : '', h('button.off', { onclick: e => { e.stopPropagation(); setSleep(null); openMenu('sleep', 0); } }, 'Quitar'))));
+        paintLeft();
+        sleepUpd = setInterval(paintLeft, 1000);
+      }
+      add(h('div.mlabel', null, sleep ? 'Cambiar a…' : 'Parar dentro de…'));
+      const pick = m => { setSleep(m); M4.haptic('confirm'); openMenu('sleep', 0); };
+      add(h('div.slgrid', null, ...[5, 10, 15, 20, 30, 45, 60, 90, 120].map(m => h('button', { onclick: e => { e.stopPropagation(); pick(m); } }, h('b', null, m < 60 || m % 60 ? m : m / 60), h('small', null, m < 60 || m % 60 ? 'min' : m === 60 ? 'hora' : 'horas'))),
+        h('button.wide' + (sleep && sleep.end === 'video' ? '.on' : ''), { onclick: e => { e.stopPropagation(); pick('video'); } }, icon('film'), h('span', null, 'Al acabar el vídeo'))));
+      // otro tiempo, sin ventanas: con − y +
+      let custom = Settings.get().sleepCustom || 25;
+      const cv = h('b', null, custom + ' min');
+      const cstep = d => { custom = Math.max(1, Math.min(600, custom + d)); cv.textContent = custom + ' min'; M4.haptic('tick'); };
+      add(h('div.slcustom', null, h('span', null, 'Otro tiempo'), h('button.ib', { 'aria-label': 'Menos', onclick: e => { e.stopPropagation(); cstep(custom > 10 ? -5 : -1); } }, '−'), cv,
+        h('button.ib', { 'aria-label': 'Más', onclick: e => { e.stopPropagation(); cstep(custom >= 10 ? 5 : 1); } }, '+'),
+        h('button.go', { onclick: e => { e.stopPropagation(); Settings.set({ sleepCustom: custom }, true); pick(custom); } }, 'Poner')));
+      add(h('div.mlabel', null, 'Y al acabar…'));
+      const act = Settings.get().sleepAction || 'pause';
+      const acts = [['pause', 'Pausar'], ['close', 'Cerrar Mix4Up'], ...(DESKTOP ? [['shutdown', 'Apagar el PC']] : [])];
+      add(h('div.seg', null, ...acts.map(([k, n]) => h('button' + (act === k ? '.on' : ''), { onclick: e => { e.stopPropagation(); Settings.set({ sleepAction: k }); openMenu('sleep', 0); } }, n))));
+      add(row('vol', 'Bajar el volumen poco a poco', null, () => { Settings.set({ sleepFade: Settings.get().sleepFade === false }); openMenu('sleep', 0); }, { on: Settings.get().sleepFade !== false }));
+      if (ANDROID) add(h('p.mnote', null, 'Al pararse, la pantalla del móvil se apaga sola como siempre.'));
     }
   }
+  function setLoop(on) { loopOne = !!on; toast(on ? 'Este vídeo se repetirá' : 'Ya no se repite'); M4.haptic('tick'); }
   function setQuality(q) {
     Settings.set({ quality: q }, true);
     if (!info) return;
@@ -650,11 +734,18 @@ const Player = (() => {
   /* ---------- temporizador para dormir ---------- */
   function setSleep(m) {
     if (m == null) { sleep = null; tagTimer.hidden = true; if (item && master().volume < (+Settings.get().volume || 1)) applyVolume(); toast('Temporizador quitado'); return; }
-    sleep = { end: m === 'video' ? 'video' : Date.now() + m * 60e3 };
+    sleep = { end: m === 'video' ? 'video' : Date.now() + m * 60e3, len: m === 'video' ? 0 : m * 60e3 };
     tagTimer.hidden = false;
     sleepTick();
     M4.haptic('confirm');
     toast(m === 'video' ? 'Se parará al acabar este vídeo' : 'Se parará dentro de ' + m + ' minutos');
+  }
+  function extendSleep(m) {
+    if (!sleep || sleep.end === 'video') return;
+    sleep.end += m * 60e3; sleep.len += m * 60e3;
+    if (item && master().volume < (+Settings.get().volume || 1)) applyVolume();
+    sleepTick();
+    toast('Temporizador: ' + sleepLabel() + ' más');
   }
   function sleepLabel() {
     if (!sleep) return '';
@@ -667,7 +758,7 @@ const Player = (() => {
     if (sleep.end === 'video') return;
     const left = (sleep.end - Date.now()) / 1000;
     // el último medio minuto, bajando el volumen poco a poco
-    if (left < 30 && left > 0) master().volume = Math.max(0, (+Settings.get().volume || 1) * left / 30);
+    if (left < 30 && left > 0 && Settings.get().sleepFade !== false) master().volume = Math.max(0, (+Settings.get().volume || 1) * left / 30);
     if (left <= 0) fireSleep();
   }
   setInterval(() => { if (sleep && sleep.end !== 'video' && (master().paused || !want)) sleepTick(); }, 1000);
@@ -694,6 +785,7 @@ const Player = (() => {
   function isFS() { return el.classList.contains('cssfs') || document.fullscreenElement === el; }
   function toggleFS(force) {
     const on = force != null ? force : !isFS();
+    if (menuOpen) { menuOpen = false; clearInterval(sleepUpd); if (menuClose) { menuClose(); menuClose = null; } menu.hidden = true; pscrim.hidden = true; }
     if (ANDROID) {
       el.classList.toggle('cssfs', on);
       document.body.classList.toggle('fullscreen', on);
@@ -721,27 +813,34 @@ const Player = (() => {
   const coarse = matchMedia('(pointer: coarse)').matches || ANDROID;
   let idleT = 0;
   // los botones se quedan a la vista un buen rato (como YouTube) y se van con calma
-  function wake(ms) { el.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => { if (menu.hidden && !dragging) el.classList.add('idle'); else wake(); }, ms || (coarse ? 4500 : 2600)); }
+  let shownAt = 0;
+  function wake(ms) { if (el.classList.contains('idle')) shownAt = Date.now(); el.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => { if (!menuOpen && !dragging) el.classList.add('idle'); else wake(); }, ms || (coarse ? 4500 : 2600)); }
   function hideCtl() { clearTimeout(idleT); el.classList.add('idle'); }
   const ctlShown = () => !el.classList.contains('idle');
-  el.addEventListener('mousemove', () => { if (!touchMode) wake(); });
-  el.addEventListener('mouseleave', () => { if (!master().paused) el.classList.add('idle'); });
-  let touchMode = false;
+  // (después de un toque, el móvil se inventa movimientos de ratón: no cuentan,
+  //  si no los botones aparecían y se iban al instante)
+  let touchMode = false, lastTouch = 0;
+  const fakeMouse = () => touchMode || Date.now() - lastTouch < 1200;
+  el.addEventListener('mousemove', () => { if (!fakeMouse()) wake(); });
+  el.addEventListener('mouseleave', () => { if (!fakeMouse() && !master().paused) el.classList.add('idle'); });
   el.addEventListener('click', e => {
-    if (touchMode) return;
-    if (!menu.hidden) { closeMenu(); return; }
+    if (fakeMouse()) return;
+    if (menuOpen) { closeMenu(); return; }
     if (!item) return;
     if (el.closest('#mini')) { M4.emit('player:expand'); return; }
     toggle();
   });
-  el.addEventListener('dblclick', e => { if (!touchMode && !el.closest('#mini')) toggleFS(); });
+  el.addEventListener('dblclick', e => { if (!fakeMouse() && !el.closest('#mini')) toggleFS(); });
 
   // en el móvil, los gestos de YouTube:
   //  · un toque: enseña u oculta los botones
   //  · dos toques a la izquierda o a la derecha: −10 / +10 s (y cada toque más, otros 10)
   //  · mantener pulsado: a 2× mientras no sueltes
   //  · deslizar hacia abajo: el vídeo baja y se queda pequeño (sigue sonando)
-  //  · deslizar hacia arriba: pantalla completa; en pantalla completa, hacia abajo la quita
+  //  · deslizar hacia arriba: pantalla completa
+  //  · en pantalla completa, deslizar hacia abajo: el vídeo encoge con el dedo y vuelve a
+  //    su tamaño normal (y si llegas hasta abajo del todo, se queda en el mini reproductor)
+  //  · (nada de volumen ni brillo con el dedo: para eso, los botones del móvil)
   //  · pellizcar en pantalla completa: llenar la pantalla o verlo entero
   const SKIP_ZONE = 0.4;
   let sx = 0, sy = 0, st = 0, ly = 0, lt = 0, vy = 0, swipe = null, holdT = 0, held = false, holdRate = 1, scrubFrom = 0, scrubTo = 0;
@@ -758,9 +857,9 @@ const Player = (() => {
     }
     document.body.classList.remove('dragdown');
   };
-  el.addEventListener('touchcancel', () => { endHold(); swipe = null; resetDrag(true); hud.classList.remove('scrub'); });
+  el.addEventListener('touchcancel', () => { endHold(); swipe = null; el.classList.remove('pulling'); el.style.borderRadius = ''; resetDrag(true); hud.classList.remove('scrub'); });
   el.addEventListener('touchstart', e => {
-    touchMode = true;
+    touchMode = true; lastTouch = Date.now();
     if (e.touches.length === 2) { clearTimeout(holdT); endHold(); swipe = 'pinch'; pinch0 = dist(e.touches); pinchK = 1; return; }
     if (e.target.closest(BLOCK)) { swipe = 'x'; return; }
     const t = e.touches[0];
@@ -799,9 +898,14 @@ const Player = (() => {
     if (swipe !== 'down' && swipe !== 'up') return;
     e.preventDefault();
     if (isFS()) {
-      // en pantalla completa el vídeo sigue al dedo
+      // en pantalla completa el vídeo baja y encoge con el dedo
+      if (dy <= 0) { el.style.transform = ''; return; }
+      const k = Math.min(1, dy / (innerHeight * 0.7));
       el.style.transition = '';
-      el.style.transform = `translateY(${dy * 0.5}px)`;
+      el.style.transformOrigin = '50% 0';
+      el.style.transform = `translateY(${dy * 0.55}px) scale(${1 - k * 0.42})`;
+      el.style.borderRadius = Math.round(k * 18) + 'px';
+      el.classList.add('pulling');
       return;
     }
     const wv = watchView();
@@ -820,6 +924,7 @@ const Player = (() => {
   }, { passive: false });
   el.addEventListener('touchend', e => {
     clearTimeout(holdT);
+    lastTouch = Date.now();
     if (swipe === 'pinch') {
       if (e.touches.length) return;
       swipe = null; video.style.transform = '';
@@ -832,8 +937,19 @@ const Player = (() => {
       const t = e.changedTouches[0], dy = t.clientY - sy, w = swipe;
       swipe = null;
       if (isFS()) {
-        resetDrag(true);
-        if (w === 'down' && (dy > 90 || vy > 0.6)) { M4.haptic('tick'); toggleFS(false); }
+        el.classList.remove('pulling'); el.style.borderRadius = '';
+        if (w === 'down' && (dy > innerHeight * 0.5 || (vy > 1.4 && dy > 120))) {
+          // hasta abajo del todo: fuera la pantalla completa y al mini reproductor
+          M4.haptic('tick');
+          el.style.transition = 'transform .2s cubic-bezier(.4,0,1,1), opacity .2s';
+          el.style.transform = `translateY(${innerHeight * 0.6}px) scale(.4)`; el.style.opacity = '0';
+          setTimeout(() => { resetDrag(false); toggleFS(false); if (watchView()) setTimeout(() => M4.emit('player:minimize'), 60); }, 190);
+        } else if (w === 'down' && (dy > 70 || vy > 0.5)) {
+          // a pantalla pequeña (el tamaño normal de la página del vídeo)
+          M4.haptic('tick');
+          el.style.transition = 'transform .18s cubic-bezier(.4,0,1,1)';
+          setTimeout(() => { resetDrag(false); toggleFS(false); el.classList.add('shrinkin'); setTimeout(() => el.classList.remove('shrinkin'), 400); }, 120);
+        } else resetDrag(true);
         return;
       }
       if (w === 'down' && (dy > innerHeight * 0.22 || (vy > 0.55 && dy > 40))) {
@@ -854,8 +970,10 @@ const Player = (() => {
       return;
     }
     if (swipe) { swipe = null; return; }
-    if (el.closest('#mini')) { M4.emit('player:expand'); return; }
-    if (!menu.hidden) { closeMenu(); return; }
+    // (que el móvil no mande luego un «clic» al botón que acaba de aparecer debajo del dedo)
+    if (e.cancelable) e.preventDefault();
+    if (el.closest('#mini')) { const t0 = e.changedTouches[0]; if (Math.abs(t0.clientX - sx) < 16 && Math.abs(t0.clientY - sy) < 16) M4.emit('player:expand'); return; }
+    if (menuOpen) { closeMenu(); return; }
     const t = e.changedTouches[0];
     if (Math.abs(t.clientX - sx) > 20 || Math.abs(t.clientY - sy) > 20) return;
     const r = el.getBoundingClientRect();
@@ -869,7 +987,7 @@ const Player = (() => {
     lastTap = n; lastSide = side;
     clearTimeout(tapT);
     // un toque: enseñar u ocultar los botones (en los lados espera un poco, por si es doble)
-    const single = () => { if (ctlShown() && !el.classList.contains('paused')) hideCtl(); else wake(); };
+    const single = () => { if (ctlShown() && !el.classList.contains('paused') && Date.now() - shownAt > 400) hideCtl(); else wake(); };
     if (side) tapT = setTimeout(single, 280); else single();
   });
   function doSkip(side) {
@@ -995,7 +1113,7 @@ const Player = (() => {
   function close() { savePos(true); stopAll(); item = null; info = null; el.remove(); clearErr(); setPlayIcon(); if (ANDROID) try { A.nowPlaying('{}'); } catch {} }
 
   return {
-    el, video, audio, open, close, mount, play, pause, toggle, seek, skip, next, setQueue, setSpeed, setSleep, toggleFS, pip, onPip, remote,
+    el, video, audio, open, close, mount, play, pause, toggle, seek, skip, next, setQueue, queueNext, toggleMenu, setSpeed, setSleep, toggleFS, pip, onPip, remote,
     setBg,
     get item() { return item; }, get info() { return info; }, get playing() { return want && !!item && (!master().paused || holding); },
     get time() { return now(); }, get duration() { return total(); }, isFS, keyOf, sleepLabel, openMenu,

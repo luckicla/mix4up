@@ -466,7 +466,29 @@ const YT = (() => {
     await call('browse/edit_playlist', { playlistId: 'WL', actions: [on ? { addedVideoId: id, action: 'ACTION_ADD_VIDEO' } : { removedVideoId: id, action: 'ACTION_REMOVE_VIDEO_BY_VIDEO_ID' }] });
   }
 
-  return { getCfg, account, warm, chipFeed, connected, call, collect, clean, isShort, home, subscriptions, guideSubs, search, suggest, watch, moreRelated,
+  /* ---------- tu perfil: nombre y foto de tu cuenta ---------- */
+  // (se guarda un rato para que la foto salga al momento al abrir la app)
+  let meP = null;
+  function me(force) {
+    const c = M4.store.get('me');
+    if (!connected() && !(acct && acct.connected)) return Promise.resolve(null);
+    if (c && !force && Date.now() - c.at < 6 * 3600e3) return Promise.resolve(c);
+    if (meP) return meP;
+    meP = call('account/account_menu', {}).then(r => {
+      const hd = find(r, 'activeAccountHeaderRenderer');
+      if (!hd) return c || null;
+      let photo = bestThumb(hd.accountPhoto && hd.accountPhoto.thumbnails);
+      photo = photo.replace(/=s\d+(-[^/]*)?$/, '=s176-c-k-c0x00ffffff-no-rj');
+      const v = { name: text(hd.accountName), handle: text(hd.channelHandle), photo, at: Date.now() };
+      M4.store.set('me', v);
+      return v;
+    }).catch(e => { console.warn('perfil:', e.message); return c || null; }).finally(() => { meP = null; });
+    return meP;
+  }
+  const meCached = () => { const c = M4.store.get('me'); return c && c.photo ? c : null; };
+  const forgetMe = () => M4.store.set('me', null);
+
+  return { getCfg, account, warm, me, meCached, forgetMe, chipFeed, connected, call, collect, clean, isShort, home, subscriptions, guideSubs, search, suggest, watch, moreRelated,
     channel, channelTab, channelVideos, playlist, history, myPlaylists, like, subscribe, watchLater, dlpFeed, text, find, findAll,
     shortsRemoved: () => shortsRemoved, ytId };
 })();

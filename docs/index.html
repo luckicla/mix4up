@@ -2,105 +2,409 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mix4Up · YouTube sin Shorts y tus vídeos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mix4Up · YouTube sin Shorts, sin anuncios, y tus vídeos</title>
 <meta name="description" content="Mix4Up: tus recomendaciones de YouTube sin un solo Short y sin anuncios, y todos tus vídeos, en Windows y Android. Gratis y de código abierto.">
+<meta name="theme-color" content="#0c0c10">
 <meta property="og:title" content="Mix4Up · YouTube sin Shorts">
 <meta property="og:description" content="Tus recomendaciones de YouTube sin Shorts y sin anuncios, y tus vídeos. Windows y Android.">
 <meta property="og:image" content="https://luckicla.github.io/mix4up/icon-512.png">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
-:root{--bg:#0f0f13;--bg2:#17171d;--bg3:#22222b;--fg:#f1efe9;--fg2:#a5a3ad;--acc:#ff2e88;--acc2:#c8ff00;--r:16px}
-*{box-sizing:border-box}html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,"Segoe UI",Roboto,sans-serif}
+:root{
+  --bg:#0c0c10;--bg2:#15151b;--bg3:#1f1f27;--line:#2a2a34;--fg:#f3f1ec;--fg2:#a9a7b2;--fg3:#74727d;
+  --acc:#ff2e88;--acc2:#c8ff00;--r:18px;
+  --head:"SF Pro Display","Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  --body:"SF Pro Text","Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+html,body{overflow-x:clip}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 var(--body);overflow-x:hidden}
 a{color:inherit}
-header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:14px 22px;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(12px)}
-header img{width:34px;height:34px}header b{font:800 21px system-ui;letter-spacing:-.4px}header b i{font-style:normal;color:var(--acc)}
-header nav{margin-left:auto;display:flex;gap:18px;font-size:14px;color:var(--fg2)}header nav a{text-decoration:none}header nav a:hover{color:var(--fg)}
-.hero{max-width:1100px;margin:0 auto;padding:70px 22px 40px;display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center}
-h1{font-size:clamp(34px,5.4vw,60px);line-height:1.04;margin:0 0 18px;letter-spacing:-1.5px}
-h1 em{font-style:normal;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.lead{font-size:19px;color:var(--fg2);margin:0 0 28px;max-width:540px}
+svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1140px;margin:0 auto;padding:0 24px}
+.glow{position:absolute;inset:-20% -10% auto;height:900px;pointer-events:none;z-index:-1;
+  background:radial-gradient(600px 380px at 78% 30%,color-mix(in srgb,var(--acc) 26%,transparent),transparent 70%),
+             radial-gradient(520px 340px at 18% 12%,color-mix(in srgb,var(--acc2) 12%,transparent),transparent 70%)}
+.grain{position:fixed;inset:0;pointer-events:none;z-index:100;opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* cabecera */
+header{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);background:color-mix(in srgb,var(--bg) 78%,transparent);border-bottom:1px solid transparent;transition:border-color .3s}
+header.sc{border-color:var(--line)}
+header .wrap{display:flex;align-items:center;gap:12px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand img{width:32px;height:32px}
+.brand b{font:800 20px var(--head);letter-spacing:-.5px}.brand b i{font-style:normal;color:var(--acc)}
+header nav{margin-left:auto;display:flex;gap:4px;font-size:14px}
+header nav a{text-decoration:none;color:var(--fg2);padding:8px 12px;border-radius:10px;transition:color .2s,background .2s}
+header nav a:hover{color:var(--fg);background:var(--bg3)}
+header .cta{margin-left:8px;padding:9px 16px;border-radius:999px;background:var(--fg);color:var(--bg);font-weight:700;font-size:14px;text-decoration:none;transition:transform .15s}
+header .cta:hover{transform:translateY(-1px)}
+
+/* portada */
+.hero{position:relative;padding:72px 0 40px}
+.hero .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:5px 12px 5px 6px;border-radius:999px;background:var(--bg2);border:1px solid var(--line);font-size:13px;color:var(--fg2);margin-bottom:22px;text-decoration:none}
+.pill b{background:var(--acc2);color:#111;border-radius:999px;padding:2px 9px;font-size:12px}
+h1{font:800 clamp(40px,6vw,72px)/1.0 var(--head);letter-spacing:-2.2px;margin:0 0 22px}
+h1 .strike{position:relative;color:var(--fg3);white-space:nowrap}
+h1 .strike::after{content:"";position:absolute;left:-4px;right:-4px;top:54%;height:6px;border-radius:3px;background:var(--acc);transform:rotate(-3deg) scaleX(0);transform-origin:0 50%;animation:strike .6s .5s cubic-bezier(.6,0,.2,1) forwards}
+@keyframes strike{to{transform:rotate(-3deg) scaleX(1)}}
+h1 em{font-style:normal;background:linear-gradient(95deg,var(--acc) 10%,#ff8a5b 55%,var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:19px;line-height:1.55;color:var(--fg2);margin:0 0 30px;max-width:540px}
 .dl{display:flex;flex-wrap:wrap;gap:12px}
-.btn{display:inline-flex;align-items:center;gap:10px;padding:13px 20px;border-radius:999px;background:var(--bg3);text-decoration:none;font-weight:700}
-.btn.acc{background:var(--acc);color:#fff}.btn:hover{filter:brightness(1.12)}
-.btn small{display:block;font-weight:400;font-size:12px;opacity:.75}
-.mock{background:var(--bg2);border-radius:28px;padding:14px;box-shadow:0 30px 80px rgba(0,0,0,.5);border:1px solid #2b2b35}
-.mock .bar{display:flex;gap:8px;align-items:center;margin-bottom:12px}.mock .bar i{width:22px;height:22px;border-radius:6px;background:url(logo.svg) center/cover}
-.mock .s{flex:1;height:30px;border-radius:15px;background:var(--bg3)}
-.mock .chips{display:flex;gap:6px;margin-bottom:12px}.mock .chips span{padding:4px 10px;border-radius:8px;background:var(--bg3);font-size:12px}.mock .chips span:first-child{background:var(--fg);color:var(--bg)}
-.mock .card{margin-bottom:14px}.mock .th{aspect-ratio:16/9;border-radius:12px;position:relative;overflow:hidden}
-.mock .th::after{content:attr(data-d);position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.8);font-size:11px;padding:1px 5px;border-radius:4px}
-.mock .t{display:flex;gap:10px;margin-top:8px}.mock .t b{width:28px;height:28px;border-radius:50%;flex:none}.mock .t p{margin:0;font-size:13px}.mock .t small{color:var(--fg2);font-size:12px}
-section{max-width:1100px;margin:0 auto;padding:50px 22px}
-h2{font-size:32px;letter-spacing:-.6px;margin:0 0 24px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
-.f{background:var(--bg2);border:1px solid #2b2b35;border-radius:var(--r);padding:20px}
-.f h3{margin:8px 0 6px;font-size:17px}.f p{margin:0;color:var(--fg2);font-size:14px}.f .ic{font-size:26px}
-.no{display:inline-block;padding:2px 8px;border-radius:6px;background:#3a1322;color:#ff7aae;font-weight:700;font-size:13px}
-.steps{counter-reset:s;display:grid;gap:12px}.steps div{background:var(--bg2);border-radius:var(--r);padding:16px 18px 16px 56px;position:relative}
-.steps div::before{counter-increment:s;content:counter(s);position:absolute;left:16px;top:14px;width:28px;height:28px;border-radius:50%;background:var(--acc);display:grid;place-items:center;font-weight:800}
-footer{color:var(--fg2);font-size:13px;text-align:center;padding:40px 22px 60px}
-#ver{color:var(--acc2);font-weight:700}
-@media (max-width:820px){.hero{grid-template-columns:1fr;padding-top:36px}.mock{max-width:380px;margin:0 auto}header nav{display:none}}
+.btn{display:inline-flex;align-items:center;gap:12px;padding:12px 20px 12px 16px;border-radius:16px;background:var(--bg3);border:1px solid var(--line);text-decoration:none;font-weight:700;transition:transform .15s,background .2s,border-color .2s}
+.btn:hover{transform:translateY(-2px);border-color:#3a3a46}
+.btn.acc{background:var(--acc);border-color:transparent;color:#fff;box-shadow:0 12px 30px color-mix(in srgb,var(--acc) 35%,transparent)}
+.btn.acc:hover{box-shadow:0 16px 40px color-mix(in srgb,var(--acc) 45%,transparent)}
+.btn span{display:flex;flex-direction:column;line-height:1.25}
+.btn small{font-weight:500;font-size:12px;opacity:.75}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:20px;color:var(--fg3);font-size:13px}
+.meta span{display:inline-flex;align-items:center;gap:6px}
+.meta svg.i{width:16px;height:16px;color:var(--acc2)}
+#ver{color:var(--fg);font-weight:700}
+
+/* el móvil de muestra */
+.stage{position:relative;height:600px}
+.phone{position:absolute;right:40px;top:0;width:300px;height:600px;border-radius:44px;background:#050507;padding:10px;box-shadow:0 0 0 2px #2c2c36,0 40px 100px rgba(0,0,0,.6),0 0 120px color-mix(in srgb,var(--acc) 18%,transparent);animation:float 7s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-10px)}}
+.screen{position:relative;height:100%;border-radius:35px;overflow:hidden;background:var(--bg)}
+.notch{position:absolute;top:9px;left:50%;width:84px;height:24px;margin-left:-42px;border-radius:12px;background:#050507;z-index:3}
+.ptop{display:flex;align-items:center;gap:6px;padding:40px 14px 8px}
+.ptop img{width:20px;height:20px}.ptop b{font:800 14px var(--head);letter-spacing:-.3px}.ptop b i{font-style:normal;color:var(--acc)}
+.ptop .face{margin-left:auto;width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#ffb36b,#ff2e88);box-shadow:0 0 0 1.5px var(--bg),0 0 0 2.5px color-mix(in srgb,var(--acc) 70%,transparent)}
+.ptop svg.i{width:18px;height:18px;color:var(--fg2);margin-left:6px}
+.pchips{display:flex;gap:6px;padding:4px 14px 10px;font-size:11px}
+.pchips span{padding:4px 10px;border-radius:8px;background:var(--bg3)}.pchips span:first-child{background:var(--fg);color:var(--bg);font-weight:700}
+.vid{margin-bottom:12px}
+.th{position:relative;aspect-ratio:16/9;overflow:hidden}
+.th::after{content:attr(data-d);position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.78);font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px}
+.th .art{position:absolute;inset:0}
+.vt{display:flex;gap:8px;padding:8px 12px 0}
+.vt b{width:24px;height:24px;border-radius:50%;flex:none}
+.vt p{margin:0;font-size:11.5px;font-weight:600;line-height:1.3}.vt small{color:var(--fg2);font-size:10px}
+.ptabs{position:absolute;left:12px;right:12px;bottom:12px;height:52px;border-radius:20px;display:flex;align-items:center;justify-content:space-around;background:color-mix(in srgb,var(--bg2) 75%,transparent);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.ptabs i{position:absolute;left:14px;top:6px;width:48px;height:26px;border-radius:13px;background:color-mix(in srgb,var(--acc) 24%,transparent);animation:tabs 8s cubic-bezier(.3,1.25,.4,1) infinite}
+@keyframes tabs{0%,22%{transform:translateX(0)}27%,47%{transform:translateX(68px)}52%,72%{transform:translateX(136px)}77%,95%{transform:translateX(204px)}100%{transform:translateX(0)}}
+.ptabs span{position:relative;display:flex;flex-direction:column;align-items:center;font-size:8.5px;color:var(--fg2);gap:1px;width:56px}
+.ptabs svg.i{width:18px;height:18px;color:var(--fg)}
+.ptabs .tface{width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#ffb36b,#ff2e88)}
+/* la ventanita del reproductor de muestra */
+.mini{position:absolute;left:0;bottom:70px;width:290px;border-radius:18px;background:var(--bg2);border:1px solid var(--line);box-shadow:0 30px 70px rgba(0,0,0,.55);overflow:hidden;animation:float 7s 1.2s ease-in-out infinite;z-index:2}
+.mini .th{aspect-ratio:16/9}
+.mini .ctl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:28px;background:rgba(0,0,0,.28)}
+.mini .ctl span{width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.4);display:grid;place-items:center}
+.mini .ctl span.big{width:46px;height:46px}
+.mini .ctl svg.i{width:18px;height:18px;fill:#fff;stroke:#fff}
+.mini .bar{position:absolute;left:10px;right:10px;bottom:10px;height:3px;border-radius:2px;background:rgba(255,255,255,.25)}
+.mini .bar i{position:absolute;left:0;top:0;bottom:0;width:38%;border-radius:2px;background:var(--acc);animation:prog 12s linear infinite}
+.mini .bar i::after{content:"";position:absolute;right:-5px;top:-3.5px;width:10px;height:10px;border-radius:50%;background:var(--acc)}
+@keyframes prog{from{width:12%}to{width:88%}}
+.mini .tag{position:absolute;left:10px;top:10px;padding:3px 9px;border-radius:999px;background:rgba(0,0,0,.6);font-size:11px;font-weight:700;display:flex;gap:5px;align-items:center}
+.mini .tag svg.i{width:13px;height:13px;color:var(--acc2)}
+.mini .mt{padding:10px 14px 12px}.mini .mt p{margin:0;font-size:13px;font-weight:600}.mini .mt small{color:var(--fg2);font-size:11.5px}
+.noshort{position:absolute;right:0;top:110px;z-index:3;padding:10px 14px;border-radius:14px;background:var(--acc2);color:#111;font-weight:800;font-size:14px;display:flex;align-items:center;gap:8px;box-shadow:0 18px 40px rgba(200,255,0,.25);transform:rotate(6deg);animation:float 6s .6s ease-in-out infinite}
+.noshort svg.i{width:18px;height:18px;stroke-width:2.4}
+
+/* secciones */
+section{padding:84px 0}
+.kicker{display:inline-block;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin-bottom:12px}
+h2{font:800 clamp(30px,4vw,46px)/1.08 var(--head);letter-spacing:-1.2px;margin:0 0 16px}
+.sub{color:var(--fg2);font-size:18px;max-width:640px;margin:0 0 40px}
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+.card{position:relative;background:var(--bg2);border:1px solid var(--line);border-radius:22px;padding:24px;overflow:hidden;transition:border-color .25s,transform .25s}
+.card:hover{border-color:#3a3a46;transform:translateY(-3px)}
+.card .ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;margin-bottom:16px;background:color-mix(in srgb,var(--c,var(--acc)) 16%,var(--bg3));color:var(--c,var(--acc))}
+.card .ic svg.i{width:23px;height:23px}
+.card h3{font:700 19px/1.25 var(--head);letter-spacing:-.3px;margin:0 0 6px}
+.card p{margin:0;color:var(--fg2);font-size:14.5px;line-height:1.55}
+.s2{grid-column:span 2}.s3{grid-column:span 3}.s4{grid-column:span 4}
+.card.big{padding:30px;background:linear-gradient(160deg,color-mix(in srgb,var(--acc) 16%,var(--bg2)),var(--bg2) 60%)}
+.card.big h3{font-size:26px}
+.zero{font:900 92px/1 var(--head);letter-spacing:-4px;margin:6px 0 4px;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.feeds{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.feeds span{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--bg3);color:var(--fg2);display:inline-flex;gap:5px;align-items:center}
+.feeds svg.i{width:13px;height:13px;color:var(--acc2);stroke-width:2.6}
+
+/* el reproductor */
+.player-sec .wrap{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
+.gest{display:grid;gap:10px}
+.g{display:flex;gap:16px;align-items:center;padding:14px 16px;border-radius:16px;background:var(--bg2);border:1px solid var(--line)}
+.g .gi{width:52px;height:52px;border-radius:14px;background:var(--bg3);display:grid;place-items:center;flex:none;position:relative;overflow:hidden}
+.g .gi svg{width:30px;height:30px}
+.g b{display:block;font-size:15px}.g small{color:var(--fg2);font-size:13.5px}
+.finger{animation:fing 2.4s ease-in-out infinite}
+.finger.dn{animation-name:fdn}.finger.lr{animation-name:flr}.finger.tap{animation-name:ftap}
+@keyframes fdn{0%,15%{transform:translateY(-6px);opacity:0}25%{opacity:1}70%{transform:translateY(7px);opacity:1}85%,100%{opacity:0;transform:translateY(7px)}}
+@keyframes flr{0%,15%{transform:translateX(-6px);opacity:0}25%{opacity:1}70%{transform:translateX(7px);opacity:1}85%,100%{opacity:0}}
+@keyframes ftap{0%,100%{transform:scale(1);opacity:.4}20%{transform:scale(.7);opacity:1}35%{transform:scale(1);opacity:.4}50%{transform:scale(.7);opacity:1}65%{transform:scale(1);opacity:.4}}
+@keyframes fing{0%,100%{transform:scale(1)}50%{transform:scale(.8)}}
+.sleep{background:var(--bg2);border:1px solid var(--line);border-radius:26px;padding:22px;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.sleep .now{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;padding:18px;border-radius:18px;background:linear-gradient(135deg,color-mix(in srgb,var(--acc2) 26%,#15151a),color-mix(in srgb,var(--acc) 22%,#15151a))}
+.sleep .now svg.i{width:40px;height:40px;color:var(--acc2);animation:sway 3s ease-in-out infinite}
+@keyframes sway{50%{transform:rotate(-12deg)}}
+.sleep .now b{font:800 36px/1 var(--head);font-variant-numeric:tabular-nums}
+.sleep .now small{color:rgba(255,255,255,.7)}
+.sleep .now .bar{grid-column:1/-1;height:5px;border-radius:3px;background:rgba(255,255,255,.15);margin-top:10px;overflow:hidden}
+.sleep .now .bar i{display:block;height:100%;width:64%;background:var(--acc2);animation:shrink 20s linear infinite}
+@keyframes shrink{from{width:64%}to{width:4%}}
+.sleep h4{margin:18px 0 10px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg3)}
+.sleep .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sleep .grid span{display:flex;flex-direction:column;align-items:center;padding:10px 0;border-radius:14px;background:var(--bg3);font:700 20px var(--head)}
+.sleep .grid span small{font:500 11px var(--body);color:var(--fg2)}
+.sleep .grid span.on{background:color-mix(in srgb,var(--acc2) 30%,var(--bg3));box-shadow:inset 0 0 0 1.5px var(--acc2)}
+.sleep .seg{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--bg3)}
+.sleep .seg span{flex:1;text-align:center;padding:8px 0;border-radius:9px;font-size:13px;color:var(--fg2)}
+.sleep .seg span.on{background:var(--fg);color:var(--bg);font-weight:700}
+
+/* comparación */
+.cmp{border:1px solid var(--line);border-radius:22px;overflow:hidden;background:var(--bg2)}
+.cmp .r{display:grid;grid-template-columns:1.6fr 1fr 1fr;align-items:center;padding:14px 22px;border-top:1px solid var(--line);font-size:15px}
+.cmp .r:first-child{border-top:0;background:var(--bg3);font-weight:700;font-size:14px}
+.cmp .r > :not(:first-child){text-align:center;display:flex;justify-content:center}
+.cmp .yes{color:var(--acc2)}.cmp .nope{color:#ff6b8f}
+.cmp svg.i{width:22px;height:22px;stroke-width:2.4}
+.cmp .m4{font-weight:800;color:var(--fg)}
+
+/* descargar */
+.dlg{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.dlc{display:flex;flex-direction:column;gap:6px;padding:26px;border-radius:22px;background:var(--bg2);border:1px solid var(--line);text-decoration:none;transition:transform .2s,border-color .2s}
+.dlc:hover{transform:translateY(-4px);border-color:var(--acc)}
+.dlc .ic{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:var(--bg3);margin-bottom:10px;color:var(--fg)}
+.dlc .ic svg.i{width:28px;height:28px}
+.dlc b{font:700 20px var(--head)}.dlc small{color:var(--fg2);font-size:14px}
+.dlc .go{margin-top:14px;display:inline-flex;align-items:center;gap:8px;font-weight:700;color:var(--acc)}
+.dlc .go svg.i{width:18px;height:18px}
+.dlc.main{background:linear-gradient(160deg,color-mix(in srgb,var(--acc) 22%,var(--bg2)),var(--bg2) 70%);border-color:color-mix(in srgb,var(--acc) 40%,var(--line))}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:22px}
+.step{padding:20px;border-radius:18px;border:1px dashed var(--line)}
+.step i{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--fg);color:var(--bg);font:800 14px var(--head);font-style:normal;margin-bottom:10px}
+.step b{display:block;margin-bottom:4px}.step p{margin:0;color:var(--fg2);font-size:14px}
+
+/* preguntas */
+.faq{display:grid;gap:10px;max-width:820px}
+details{border:1px solid var(--line);border-radius:16px;background:var(--bg2);transition:border-color .2s}
+details[open]{border-color:#3a3a46}
+summary{cursor:pointer;list-style:none;padding:18px 22px;font-weight:700;display:flex;align-items:center;gap:12px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";margin-left:auto;width:10px;height:10px;border-right:2px solid var(--fg2);border-bottom:2px solid var(--fg2);transform:rotate(45deg) translateY(-3px);transition:transform .25s}
+details[open] summary::after{transform:rotate(225deg) translateY(-3px)}
+details p{margin:0;padding:0 22px 20px;color:var(--fg2)}
+
+footer{border-top:1px solid var(--line);color:var(--fg3);font-size:13px;padding:34px 0 50px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}
+footer .brand img{width:24px;height:24px}footer .brand b{font-size:16px}
+footer nav{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:none}footer a:hover{color:var(--fg)}
+
+/* al bajar, cada cosa aparece */
+.rv{opacity:0;transform:translateY(24px);transition:opacity .7s cubic-bezier(.2,.8,.2,1),transform .7s cubic-bezier(.2,.8,.2,1)}
+.rv.in{opacity:1;transform:none}
+
+@media (max-width:960px){
+  .hero .wrap,.player-sec .wrap{grid-template-columns:1fr}
+  .stage{height:560px;max-width:420px;margin:0 auto;width:100%}
+  .phone{right:10px;transform:scale(.93);transform-origin:top right}
+  .bento{grid-template-columns:repeat(2,1fr)}.s2,.s3,.s4{grid-column:span 2}.bento .half{grid-column:span 1}
+  .dlg,.steps{grid-template-columns:1fr}
+  header nav a:not(.cta){display:none}
+}
+@media (max-width:520px){
+  .wrap{padding:0 18px}
+  .hero{padding-top:36px}
+  .bento .half{grid-column:span 2}
+  .cmp .r{grid-template-columns:1.4fr .8fr .8fr;padding:12px 14px;font-size:14px}
+  .mini{width:240px}
+  .noshort{top:60px}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.rv{opacity:1;transform:none}}
 </style>
 </head>
 <body>
-<header><img src="logo.svg" alt=""><b>Mix<i>4</i>Up</b>
-<nav><a href="#que">Qué hace</a><a href="#descargar">Descargar</a><a href="#seguro">¿Es seguro?</a><a href="https://github.com/luckicla/mix4up">Código</a></nav></header>
+<div class="grain" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15V15H9v5.5H5.5A1.5 1.5 0 0 1 4 19z"/></symbol>
+  <symbol id="subs" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13.5" rx="3.2"/><path d="M7 3.5h10"/><path fill="currentColor" stroke="none" d="M10.2 10.8v6l5-3z"/></symbol>
+  <symbol id="folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path fill="currentColor" stroke="none" d="M10.4 10.8v5l4.2-2.5z"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
+  <symbol id="noshort" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="3"/><path d="M3.5 3.5l17 17"/></symbol>
+  <symbol id="bolt" viewBox="0 0 24 24"><path d="M13.5 3 5.5 13.5H12L10.5 21l8-10.5H12z"/></symbol>
+  <symbol id="film" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9.5h17M8 5l2 4.5M13 5l2 4.5"/></symbol>
+  <symbol id="download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="moon" viewBox="0 0 24 24"><path d="M19.8 14.6A8 8 0 1 1 9.4 4.2a6.4 6.4 0 0 0 10.4 10.4z"/><path d="M16.8 3.6v2.6M15.5 4.9h2.6"/></symbol>
+  <symbol id="devices" viewBox="0 0 24 24"><rect x="2.5" y="5" width="13" height="10" rx="1.6"/><path d="M5.5 19h7M9 15v4"/><rect x="16.5" y="9" width="5" height="10.5" rx="1.5"/></symbol>
+  <symbol id="palette" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.1 0 1.7-.9 1.4-1.9-.3-1 .3-2.1 1.5-2.1h1.8a3.8 3.8 0 0 0 3.8-3.8C20.5 7.3 16.7 3.5 12 3.5z"/><circle fill="currentColor" stroke="none" cx="7.6" cy="11.6" r="1.25"/><circle fill="currentColor" stroke="none" cx="10.2" cy="7.6" r="1.25"/><circle fill="currentColor" stroke="none" cx="15" cy="7.9" r="1.25"/></symbol>
+  <symbol id="shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v5.5c0 4.4-3 7.8-7 9-4-1.2-7-4.6-7-9V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></symbol>
+  <symbol id="noad" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M7.5 15l2-6 2 6M8.1 13.3h2.8M14 9v6h1.2a3 3 0 0 0 0-6z"/><path d="M3 3l18 18"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="play" viewBox="0 0 24 24"><path fill="currentColor" stroke="currentColor" stroke-width="1.6" d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.3-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z"/></symbol>
+  <symbol id="pause" viewBox="0 0 24 24"><rect fill="currentColor" stroke="none" x="6.3" y="5" width="4" height="14" rx="1.5"/><rect fill="currentColor" stroke="none" x="13.7" y="5" width="4" height="14" rx="1.5"/></symbol>
+  <symbol id="next" viewBox="0 0 24 24"><path fill="currentColor" stroke="currentColor" stroke-width="1.4" d="M5.5 6.4v11.2a.9.9 0 0 0 1.4.74l8.1-5.6a.9.9 0 0 0 0-1.48L6.9 5.66a.9.9 0 0 0-1.4.74z"/><rect fill="currentColor" stroke="none" x="16.6" y="5.4" width="2.3" height="13.2" rx="1.15"/></symbol>
+  <symbol id="prev" viewBox="0 0 24 24"><path fill="currentColor" stroke="currentColor" stroke-width="1.4" d="M18.5 6.4v11.2a.9.9 0 0 1-1.4.74l-8.1-5.6a.9.9 0 0 1 0-1.48l8.1-5.6a.9.9 0 0 1 1.4.74z"/><rect fill="currentColor" stroke="none" x="5.1" y="5.4" width="2.3" height="13.2" rx="1.15"/></symbol>
+  <symbol id="monitor" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></symbol>
+  <symbol id="phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.8"/><path d="M10.5 18.5h3"/></symbol>
+  <symbol id="usb" viewBox="0 0 24 24"><rect x="8" y="9" width="8" height="12.5" rx="2"/><path d="M9.5 9V3.5h5V9M11 5.5v1.5M13 5.5v1.5"/></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="code" viewBox="0 0 24 24"><path d="M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5M13.5 4.5l-3 15"/></symbol>
+  <symbol id="refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.35-5.65M20 4v4.5h-4.5"/></symbol>
+  <symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8.6" r="3.8"/><path d="M4.6 20a7.4 7.4 0 0 1 14.8 0"/></symbol>
+  <symbol id="hand" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="currentColor" stroke="none" opacity=".9"/></symbol>
+</defs></svg>
+
+<header id="hd"><div class="wrap">
+  <a class="brand" href="#"><img src="logo.svg" alt=""><b>Mix<i>4</i>Up</b></a>
+  <nav><a href="#que">Qué hace</a><a href="#reproductor">Reproductor</a><a href="#preguntas">Preguntas</a><a href="https://github.com/luckicla/mix4up">Código</a><a class="cta" href="#descargar">Descargar</a></nav>
+</div></header>
 
 <div class="hero">
-  <div>
-    <h1>Tu YouTube.<br><em>Sin un solo Short.</em></h1>
-    <p class="lead">Mix4Up te enseña lo mismo que te recomienda YouTube —tu inicio, tus suscripciones, tu historial— pero sin Shorts y sin anuncios. Y además, todos tus vídeos del PC y del móvil.</p>
-    <div class="dl" id="descargar">
-      <a class="btn acc" href="https://github.com/luckicla/mix4up/releases/download/mix4up-pc-latest/Mix4Up-Instalador.exe">⬇ Windows<small>Instalador · se actualiza sola</small></a>
-      <a class="btn" href="https://github.com/luckicla/mix4up/releases/download/mix4up-android-latest/Mix4Up.apk">⬇ Android<small>APK · se actualiza sola</small></a>
-      <a class="btn" href="https://github.com/luckicla/mix4up/releases/download/mix4up-pc-latest/Mix4Up-Portable.exe">Portable<small>Sin instalar (USB)</small></a>
+  <div class="glow" aria-hidden="true"></div>
+  <div class="wrap">
+    <div>
+      <a class="pill" href="#descargar"><b>Nuevo</b> Menús nuevos, gestos y temporizador para dormir</a>
+      <h1>Tu YouTube.<br>Sin <span class="strike">Shorts</span>.<br><em>Sin anuncios.</em></h1>
+      <p class="lead">Las mismas recomendaciones de siempre —tu inicio, tus suscripciones, tu historial— sin un solo Short ni un anuncio. Y todos tus vídeos del PC y del móvil, en el mismo sitio.</p>
+      <div class="dl">
+        <a class="btn acc" href="https://github.com/luckicla/mix4up/releases/download/mix4up-pc-latest/Mix4Up-Instalador.exe"><svg class="i"><use href="#monitor"/></svg><span>Descargar para Windows<small>Instalador · se actualiza sola</small></span></a>
+        <a class="btn" href="https://github.com/luckicla/mix4up/releases/download/mix4up-android-latest/Mix4Up.apk"><svg class="i"><use href="#phone"/></svg><span>Android<small>APK · se actualiza sola</small></span></a>
+      </div>
+      <div class="meta"><span>Versión <b id="ver">—</b></span><span><svg class="i"><use href="#check"/></svg>Gratis</span><span><svg class="i"><use href="#check"/></svg>Código abierto</span><span><svg class="i"><use href="#check"/></svg>Sin cuentas ni servidores</span></div>
     </div>
-    <p style="color:var(--fg2);font-size:13px;margin-top:14px">Versión <span id="ver">—</span> · gratis · código abierto</p>
-  </div>
-  <div class="mock" aria-hidden="true">
-    <div class="bar"><i></i><div class="s"></div></div>
-    <div class="chips"><span>Todo</span><span>Música</span><span>Ciencia</span><span>Directos</span></div>
-    <div class="card"><div class="th" data-d="12:41" style="background:linear-gradient(135deg,#ff2e88,#6a00ff)"></div><div class="t"><b style="background:#c8ff00"></b><div><p>Así se construyó el puente más largo del mundo</p><small>Ingeniería Hoy · 1,2 M visualizaciones · hace 2 días</small></div></div></div>
-    <div class="card"><div class="th" data-d="24:07" style="background:linear-gradient(135deg,#00c2ff,#22d39a)"></div><div class="t"><b style="background:#ff7a00"></b><div><p>Receta de cocido madrileño de la abuela</p><small>Cocina Fácil · 340 mil visualizaciones · hace 1 semana</small></div></div></div>
+
+    <div class="stage" aria-hidden="true">
+      <div class="noshort"><svg class="i"><use href="#noshort"/></svg>0 Shorts</div>
+      <div class="phone"><div class="screen">
+        <div class="notch"></div>
+        <div class="ptop"><img src="logo.svg" alt=""><b>Mix<i>4</i>Up</b><svg class="i" style="margin-left:auto"><use href="#search"/></svg><span class="face" style="margin-left:10px"></span></div>
+        <div class="pchips"><span>Todo</span><span>Música</span><span>Ciencia</span><span>Cocina</span></div>
+        <div class="vid"><div class="th" data-d="12:41"><svg class="art" viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="a1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a1a5e"/><stop offset="1" stop-color="#ff2e88"/></linearGradient></defs><rect width="160" height="90" fill="url(#a1)"/><circle cx="118" cy="30" r="14" fill="#ffd36b" opacity=".9"/><path d="M0 72 C30 55 50 70 80 58 S130 48 160 62 V90 H0z" fill="#12102a" opacity=".8"/><path d="M20 90 L60 40 L100 90z" fill="#0b0a18"/></svg></div>
+          <div class="vt"><b style="background:linear-gradient(135deg,#c8ff00,#22d39a)"></b><div><p>Así se construyó el puente más largo del mundo</p><small>Ingeniería Hoy · 1,2 M · hace 2 días</small></div></div></div>
+        <div class="vid"><div class="th" data-d="24:07"><svg class="art" viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="a2" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#0b3d3a"/><stop offset="1" stop-color="#22d39a"/></linearGradient></defs><rect width="160" height="90" fill="url(#a2)"/><circle cx="60" cy="52" r="26" fill="#f4e2c4"/><circle cx="60" cy="52" r="19" fill="#e0a45c"/><circle cx="52" cy="47" r="4" fill="#b8482c"/><circle cx="66" cy="57" r="5" fill="#b8482c"/><rect x="100" y="20" width="40" height="52" rx="6" fill="#0b2a28" opacity=".6"/></svg></div>
+          <div class="vt"><b style="background:linear-gradient(135deg,#ff7a00,#ff2e88)"></b><div><p>Cocido madrileño de la abuela, paso a paso</p><small>Cocina Fácil · 340 mil · hace 1 semana</small></div></div></div>
+        <div class="ptabs"><i></i><span><svg class="i"><use href="#home"/></svg>Inicio</span><span><svg class="i"><use href="#subs"/></svg>Suscripciones</span><span><svg class="i"><use href="#folder"/></svg>Mis vídeos</span><span><b class="tface"></b>Tú</span></div>
+      </div></div>
+      <div class="mini">
+        <div class="th"><svg class="art" viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="a3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b2a6b"/><stop offset="1" stop-color="#7a2bff"/></linearGradient></defs><rect width="160" height="90" fill="url(#a3)"/><g fill="#fff" opacity=".85"><circle cx="20" cy="14" r=".8"/><circle cx="48" cy="22" r="1"/><circle cx="90" cy="10" r=".7"/><circle cx="130" cy="20" r="1.1"/><circle cx="150" cy="8" r=".6"/></g><circle cx="110" cy="58" r="22" fill="#ff8a5b"/><ellipse cx="110" cy="58" rx="36" ry="7" fill="none" stroke="#ffd36b" stroke-width="2.5" transform="rotate(-14 110 58)"/></svg>
+          <div class="ctl"><span><svg class="i"><use href="#prev"/></svg></span><span class="big"><svg class="i"><use href="#pause"/></svg></span><span><svg class="i"><use href="#next"/></svg></span></div>
+          <div class="tag"><svg class="i"><use href="#moon"/></svg>27:40</div>
+          <div class="bar"><i></i></div></div>
+        <div class="mt"><p>Saturno, contado en 20 minutos</p><small>Astro al Día · reproduciendo</small></div>
+      </div>
+    </div>
   </div>
 </div>
 
 <section id="que">
-  <h2>Todo lo de YouTube, menos lo que molesta</h2>
-  <div class="grid">
-    <div class="f"><div class="ic">🏠</div><h3>Tus recomendaciones</h3><p>Conecta tu cuenta y el inicio es el tuyo: lo mismo que te recomienda YouTube, con scroll infinito.</p></div>
-    <div class="f"><div class="ic">🚫</div><h3><span class="no">0 Shorts</span></h3><p>Ni en el inicio, ni en búsquedas, ni en canales, ni en relacionados. Ni pestaña de Shorts.</p></div>
-    <div class="f"><div class="ic">⚡</div><h3>Rapidísimo</h3><p>Al abrir un vídeo se va bajando entero con varias conexiones: saltar y cambiar de calidad es al momento.</p></div>
-    <div class="f"><div class="ic">🎞️</div><h3>Tus vídeos</h3><p>MP4, MKV, WebM, MOV, AVI… con miniaturas, duración y «seguir donde lo dejaste».</p></div>
-    <div class="f"><div class="ic">⬇️</div><h3>Descargar</h3><p>Cualquier vídeo de YouTube, en la calidad que elijas, o solo el sonido.</p></div>
-    <div class="f"><div class="ic">🌙</div><h3>Temporizador para dormir</h3><p>Pon minutos o «al acabar el vídeo» y se para solo (en el PC, hasta puede apagarlo).</p></div>
-    <div class="f"><div class="ic">📱</div><h3>Móvil ↔ PC</h3><p>Lo que ves, dónde te quedaste, tus listas… sincronizado por la WiFi, y «Seguir aquí» de un aparato a otro.</p></div>
-    <div class="f"><div class="ic">🎨</div><h3>A tu gusto</h3><p>Temas, colores, esquinas, tamaño de las miniaturas, letra… y estilos listos con un toque.</p></div>
-    <div class="f"><div class="ic">🎬</div><h3>Reproductor completo</h3><p>Pantalla completa, gestos en el móvil, velocidad, subtítulos, imagen dentro de imagen, calidad, repetir un tramo A-B, y sigue sonando con la pantalla apagada.</p></div>
+  <div class="wrap">
+    <span class="kicker rv">Qué hace</span>
+    <h2 class="rv">Todo lo de YouTube,<br>menos lo que molesta.</h2>
+    <p class="sub rv">Mix4Up le pregunta a YouTube lo mismo que su web, y antes de enseñártelo quita cada Short y cada anuncio, venga de donde venga.</p>
+    <div class="bento">
+      <div class="card big s4 rv">
+        <div class="ic"><svg class="i"><use href="#noshort"/></svg></div>
+        <div class="zero">0</div>
+        <h3>Shorts. En ningún sitio.</h3>
+        <p>Ni en el inicio, ni en las búsquedas, ni en los canales, ni en los relacionados. Tampoco hay pestaña de Shorts: simplemente, no existen.</p>
+        <div class="feeds"><span><svg class="i"><use href="#check"/></svg>Inicio</span><span><svg class="i"><use href="#check"/></svg>Búsquedas</span><span><svg class="i"><use href="#check"/></svg>Canales</span><span><svg class="i"><use href="#check"/></svg>Relacionados</span><span><svg class="i"><use href="#check"/></svg>Suscripciones</span></div>
+      </div>
+      <div class="card s2 rv" style="--c:var(--acc2)"><div class="ic"><svg class="i"><use href="#noad"/></svg></div><h3>Sin anuncios</h3><p>Ni antes, ni en medio, ni banners. El vídeo empieza cuando le das.</p></div>
+      <div class="card s2 half rv" style="--c:#7aa7ff"><div class="ic"><svg class="i"><use href="#home"/></svg></div><h3>Tus recomendaciones</h3><p>Conecta tu cuenta y el inicio es el tuyo, con tus suscripciones, historial, «Ver más tarde» y listas.</p></div>
+      <div class="card s2 half rv" style="--c:#ffd36b"><div class="ic"><svg class="i"><use href="#bolt"/></svg></div><h3>Rapidísimo</h3><p>Al abrir un vídeo se baja entero en segundo plano con varias conexiones: saltar y cambiar de calidad es al momento.</p></div>
+      <div class="card s2 rv" style="--c:#22d39a"><div class="ic"><svg class="i"><use href="#folder"/></svg></div><h3>Tus vídeos</h3><p>MP4, MKV, WebM, MOV, AVI… con miniaturas, duración y «seguir donde lo dejaste».</p></div>
+      <div class="card s2 half rv" style="--c:#ff8a5b"><div class="ic"><svg class="i"><use href="#download"/></svg></div><h3>Descargas</h3><p>Cualquier vídeo, en la calidad que elijas, para verlo sin internet.</p></div>
+      <div class="card s4 rv" style="--c:#b48cff"><div class="ic"><svg class="i"><use href="#devices"/></svg></div><h3>Móvil y PC, a la vez</h3><p>Lo que ves, dónde te quedaste y tus listas, por tu WiFi. Y «Seguir aquí» de un aparato a otro.</p></div>
+      <div class="card s3 rv" style="--c:var(--acc)"><div class="ic"><svg class="i"><use href="#palette"/></svg></div><h3>A tu gusto</h3><p>Temas, colores, esquinas, letra, tamaño de las miniaturas y cómo es la barra de abajo. Con tu foto de perfil donde toca.</p></div>
+      <div class="card s3 rv" style="--c:var(--acc2)"><div class="ic"><svg class="i"><use href="#shield"/></svg></div><h3>Tuyo y privado</h3><p>Tu sesión de YouTube nunca sale de tu aparato. Mix4Up no tiene servidores propios, ni cuentas, ni anuncios, ni rastreo.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="reproductor" class="player-sec">
+  <div class="wrap">
+    <div>
+      <span class="kicker rv">El reproductor</span>
+      <h2 class="rv">Hecho para el dedo.</h2>
+      <p class="sub rv">Los gestos que ya conoces, sin sorpresas: nada de subir el volumen sin querer al deslizar.</p>
+      <div class="gest">
+        <div class="g rv"><div class="gi"><svg viewBox="0 0 30 30"><rect x="5" y="3" width="20" height="24" rx="4" fill="none" stroke="#5a5866" stroke-width="1.6"/><circle class="finger tap" cx="15" cy="15" r="4" fill="var(--acc)" style="transform-origin:15px 15px"/></svg></div><div><b>Dos toques a un lado</b><small>10 segundos adelante o atrás (y cada toque más, otros 10).</small></div></div>
+        <div class="g rv"><div class="gi"><svg viewBox="0 0 30 30"><rect x="5" y="3" width="20" height="24" rx="4" fill="none" stroke="#5a5866" stroke-width="1.6"/><circle class="finger dn" cx="15" cy="12" r="3.5" fill="var(--acc)"/></svg></div><div><b>Deslizar hacia abajo</b><small>En pantalla completa, vuelve a pequeña. Si sigues, se queda en el mini reproductor.</small></div></div>
+        <div class="g rv"><div class="gi"><svg viewBox="0 0 30 30"><rect x="5" y="3" width="20" height="24" rx="4" fill="none" stroke="#5a5866" stroke-width="1.6"/><circle class="finger lr" cx="13" cy="15" r="3.5" fill="var(--acc)"/></svg></div><div><b>Deslizar a los lados</b><small>Adelanta o atrasa viendo a qué minuto vas.</small></div></div>
+        <div class="g rv"><div class="gi"><svg viewBox="0 0 30 30"><rect x="5" y="3" width="20" height="24" rx="4" fill="none" stroke="#5a5866" stroke-width="1.6"/><circle class="finger" cx="15" cy="15" r="4" fill="var(--acc2)" style="transform-origin:15px 15px"/><text x="15" y="25" font-size="5" fill="#a9a7b2" text-anchor="middle" font-weight="700">2×</text></svg></div><div><b>Mantener pulsado</b><small>A velocidad doble mientras no sueltes.</small></div></div>
+      </div>
+    </div>
+    <div class="sleep rv" aria-hidden="true">
+      <div class="now"><svg class="i"><use href="#moon"/></svg><div><b>27:40</b><br><small>Se para a las 00:42</small></div><div class="bar"><i></i></div></div>
+      <h4>Parar dentro de…</h4>
+      <div class="grid"><span>15<small>min</small></span><span class="on">30<small>min</small></span><span>45<small>min</small></span><span>1<small>hora</small></span><span>90<small>min</small></span><span>2<small>horas</small></span></div>
+      <h4>Y al acabar…</h4>
+      <div class="seg"><span>Pausar</span><span class="on">Cerrar Mix4Up</span><span>Apagar el PC</span></div>
+    </div>
   </div>
 </section>
 
 <section>
-  <h2>Empezar en un minuto</h2>
-  <div class="steps">
-    <div><b>Descárgalo</b> (arriba) e instálalo. En el PC, el instalador; en el móvil, el APK.</div>
-    <div><b>Conecta tu cuenta de YouTube</b>: botón «Conectar con YouTube». Inicias sesión en Google dentro de Mix4Up; la sesión se guarda solo en tu aparato.</div>
-    <div><b>Listo</b>: tu inicio, sin Shorts. Si quieres, conecta el móvil con el PC en Ajustes (escaneando un QR).</div>
+  <div class="wrap">
+    <span class="kicker rv">Comparado</span>
+    <h2 class="rv">Lo mismo, pero mejor.</h2>
+    <div class="cmp rv">
+      <div class="r"><span></span><span>YouTube</span><span class="m4">Mix4Up</span></div>
+      <div class="r"><span>Tus recomendaciones y suscripciones</span><span class="yes"><svg class="i"><use href="#check"/></svg></span><span class="yes"><svg class="i"><use href="#check"/></svg></span></div>
+      <div class="r"><span>Sin Shorts</span><span class="nope"><svg class="i"><use href="#x"/></svg></span><span class="yes"><svg class="i"><use href="#check"/></svg></span></div>
+      <div class="r"><span>Sin anuncios, gratis</span><span class="nope"><svg class="i"><use href="#x"/></svg></span><span class="yes"><svg class="i"><use href="#check"/></svg></span></div>
+      <div class="r"><span>Sigue sonando con la pantalla apagada</span><span class="nope"><svg class="i"><use href="#x"/></svg></span><span class="yes"><svg class="i"><use href="#check"/></svg></span></div>
+      <div class="r"><span>Descargar en la calidad que quieras</span><span class="nope"><svg class="i"><use href="#x"/></svg></span><span class="yes"><svg class="i"><use href="#check"/></svg></span></div>
+      <div class="r"><span>Tus vídeos del PC y del móvil</span><span class="nope"><svg class="i"><use href="#x"/></svg></span><span class="yes"><svg class="i"><use href="#check"/></svg></span></div>
+      <div class="r"><span>Temporizador para dormir que apaga el PC</span><span class="nope"><svg class="i"><use href="#x"/></svg></span><span class="yes"><svg class="i"><use href="#check"/></svg></span></div>
+    </div>
   </div>
 </section>
 
-<section id="seguro">
-  <h2>¿Es seguro? Sí</h2>
-  <p style="color:var(--fg2);max-width:760px">Windows y Android pueden avisar de que Mix4Up «no es seguro»: no es por lo que hace, es porque no está firmado con un certificado de pago ni viene de una tienda. En Windows: <i>Más información → Ejecutar de todas formas</i>. En Android: <i>Más detalles → Instalar de todas formas</i>.</p>
-  <p style="color:var(--fg2);max-width:760px">Todo el código es abierto y los archivos los compila GitHub a partir de él, después de pasar pruebas automáticas en Windows y en Android. Tu sesión de YouTube nunca sale de tu aparato; Mix4Up no tiene servidores propios ni anuncios.</p>
+<section id="descargar">
+  <div class="wrap">
+    <span class="kicker rv">Descargar</span>
+    <h2 class="rv">Empieza en un minuto.</h2>
+    <p class="sub rv">Elige tu aparato. Se actualiza solo: lo instalas una vez y ya está.</p>
+    <div class="dlg">
+      <a class="dlc main rv" href="https://github.com/luckicla/mix4up/releases/download/mix4up-pc-latest/Mix4Up-Instalador.exe"><span class="ic"><svg class="i"><use href="#monitor"/></svg></span><b>Windows</b><small>Instalador para Windows 10 y 11.</small><span class="go">Descargar <svg class="i"><use href="#arrow"/></svg></span></a>
+      <a class="dlc rv" href="https://github.com/luckicla/mix4up/releases/download/mix4up-android-latest/Mix4Up.apk"><span class="ic"><svg class="i"><use href="#phone"/></svg></span><b>Android</b><small>APK para Android 7 o más nuevo.</small><span class="go">Descargar <svg class="i"><use href="#arrow"/></svg></span></a>
+      <a class="dlc rv" href="https://github.com/luckicla/mix4up/releases/download/mix4up-pc-latest/Mix4Up-Portable.exe"><span class="ic"><svg class="i"><use href="#usb"/></svg></span><b>Portable</b><small>Para Windows, sin instalar (sirve en un USB).</small><span class="go">Descargar <svg class="i"><use href="#arrow"/></svg></span></a>
+    </div>
+    <div class="steps">
+      <div class="step rv"><i>1</i><b>Instálalo</b><p>En el PC, el instalador; en el móvil, el APK.</p></div>
+      <div class="step rv"><i>2</i><b>Conecta tu cuenta</b><p>«Conectar con YouTube» e inicias sesión en Google. La sesión se queda en tu aparato.</p></div>
+      <div class="step rv"><i>3</i><b>Listo</b><p>Tu inicio, sin Shorts. Si quieres, une el móvil y el PC con un QR en Ajustes.</p></div>
+    </div>
+  </div>
 </section>
 
-<footer>Mix4Up · hermano de <a href="https://luckicla.github.io/zentor/">MixUp</a> · © 2026 luckicla</footer>
+<section id="preguntas">
+  <div class="wrap">
+    <span class="kicker rv">Preguntas</span>
+    <h2 class="rv">Lo que suele preguntarse.</h2>
+    <div class="faq">
+      <details class="rv"><summary>¿Es seguro? Windows o Android me avisan</summary><p>Sí. El aviso sale porque Mix4Up no está firmado con un certificado de pago ni viene de una tienda, no por lo que hace. En Windows: <i>Más información → Ejecutar de todas formas</i>. En Android: <i>Más detalles → Instalar de todas formas</i>. Todo el código es abierto y GitHub compila los archivos a partir de él, después de pasar pruebas automáticas en Windows y en Android.</p></details>
+      <details class="rv"><summary>¿Necesito una cuenta de YouTube?</summary><p>No. Sin cuenta ves vídeos parecidos a lo que sueles ver y puedes buscar lo que quieras. Con tu cuenta, el inicio, las suscripciones, el historial y las listas son los tuyos, y sale tu foto de perfil.</p></details>
+      <details class="rv"><summary>¿Adónde va mi sesión de Google?</summary><p>A ningún sitio: se guarda solo en tu aparato. Mix4Up no tiene servidores propios. Si unes el móvil y el PC, se pasan los datos por tu WiFi, sin internet de por medio.</p></details>
+      <details class="rv"><summary>¿Cómo se actualiza?</summary><p>Solo. Al abrirla mira si hay una versión nueva y se pone al día sin que hagas nada.</p></details>
+      <details class="rv"><summary>¿Cuánto cuesta?</summary><p>Nada. Es gratis, sin anuncios y de código abierto.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a class="brand" href="#"><img src="logo.svg" alt=""><b>Mix<i>4</i>Up</b></a>
+  <span>Hermano de <a href="https://luckicla.github.io/zentor/">MixUp</a> · © 2026 luckicla</span>
+  <nav><a href="https://github.com/luckicla/mix4up">Código</a><a href="https://github.com/luckicla/mix4up/releases">Versiones</a><a href="#descargar">Descargar</a></nav>
+</div></footer>
+
 <script>
 fetch('https://api.github.com/repos/luckicla/mix4up/releases/latest').then(r => r.json()).then(j => { if (j.tag_name) document.getElementById('ver').textContent = j.tag_name.replace(/^v/, ''); }).catch(() => {});
+const hd = document.getElementById('hd');
+addEventListener('scroll', () => hd.classList.toggle('sc', scrollY > 10), { passive: true });
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -8% 0px' });
+document.querySelectorAll('.rv').forEach((el, i) => { el.style.transitionDelay = (i % 4) * 60 + 'ms'; io.observe(el); });
 </script>
 </body>
 </html>

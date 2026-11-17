@@ -21,7 +21,22 @@ const App = (() => {
   if (M4.store.get('miniSide')) document.body.classList.add('mini-side');
   $('.brand').addEventListener('click', () => toggleSide(false));
 
+  // la pastilla de la pestaña elegida se desliza de una a otra
+  const tabInd = h('i.tabind');
+  $('#tabs').prepend(tabInd);
+  function moveTabInd(instant) {
+    const on = $('#tabs a.on');
+    if (!on || !$('#tabs').offsetWidth) { tabInd.style.opacity = '0'; return; }
+    const x = on.offsetLeft + on.offsetWidth / 2;
+    if (instant) tabInd.style.transition = 'none';
+    tabInd.style.opacity = '1';
+    tabInd.style.transform = `translateX(${x}px) translateX(-50%)`;
+    if (instant) { void tabInd.offsetWidth; tabInd.style.transition = ''; }
+  }
+  let tabFirst = true;
+  addEventListener('resize', () => moveTabInd(true));
   M4.on('route', r => {
+    setTimeout(() => { moveTabInd(tabFirst); tabFirst = false; }, 0);
     toggleSide(false);
     M4.closePop();
     const sec = r.path === '/' ? 'home' : r.path.slice(1).split('/')[0];
@@ -85,32 +100,65 @@ const App = (() => {
   });
 
   /* ---------- la cuenta ---------- */
+  // con la cuenta conectada, tu foto de perfil (en la barra de arriba y en «Tú»)
+  function paintFace(me) {
+    const b = $('#btnAccount'), tab = $('#tabs a[data-nav="library"]');
+    const face = cls => { const i = h('img.face' + (cls ? '.' + cls : ''), { src: me.photo, alt: '', referrerpolicy: 'no-referrer' }); i.onerror = () => { YT.forgetMe(); paintFace(null); }; return i; };
+    if (me && me.photo) {
+      b.replaceChildren(face()); b.classList.add('hasface');
+      b.title = (me.name || 'Tu cuenta') + (me.handle ? ' · ' + me.handle : '');
+      tab.replaceChildren(face('tface'), h('span', null, 'Tú'));
+    } else {
+      b.replaceChildren(icon('user')); b.classList.remove('hasface');
+      tab.replaceChildren(icon('user'), h('span', null, 'Tú'));
+    }
+  }
   async function paintAccount() {
     const c = await YT.account();
     const b = $('#btnAccount');
     b.classList.toggle('on', !!c.connected);
     b.title = c.connected ? 'Cuenta de YouTube conectada' : 'Conectar con YouTube';
+    if (!c.connected) { paintFace(null); return; }
+    paintFace(YT.meCached());
+    const me = await YT.me();
+    if (me) { paintFace(me); M4.emit('me', me); }
   }
   $('#btnAccount').onclick = async () => {
     const c = await YT.getCfg();
+    const me = YT.meCached();
     M4.popMenu($('#btnAccount'), c.connected
-      ? [{ icon: 'user', label: 'Cuenta conectada', fn: () => go('/settings') }, { icon: 'refresh', label: 'Volver a conectar', fn: SettingsPage.connect }, '-', { icon: 'gear', label: 'Ajustes', fn: () => go('/settings') }, { icon: 'close', label: 'Desconectar', fn: SettingsPage.disconnect }]
+      ? [{ icon: 'user', label: me && me.name ? me.name + (me.handle ? ' · ' + me.handle : '') : 'Cuenta conectada', fn: () => go('/library') }, { icon: 'refresh', label: 'Volver a conectar', fn: SettingsPage.connect }, '-', { icon: 'gear', label: 'Ajustes', fn: () => go('/settings') }, { icon: 'close', label: 'Desconectar', fn: SettingsPage.disconnect }]
       : [{ icon: 'user', label: 'Conectar con YouTube', fn: SettingsPage.connect }, '-', { icon: 'palette', label: 'Aspecto', fn: () => go('/settings') }, { icon: 'gear', label: 'Ajustes', fn: () => go('/settings') }]);
   };
-  M4.on('account', () => { paintAccount(); Views.sideSubs(); });
+  M4.on('account', () => { YT.forgetMe(); paintAccount(); Views.sideSubs(); });
 
   /* ---------- mini reproductor ---------- */
   const mini = $('#mini');
   const miniHost = h('div.playhost');
   const miniTitle = h('b'), miniSub = h('small');
   const miniPlay = h('button.ib', { 'aria-label': 'Pausar', onclick: e => { e.stopPropagation(); Player.toggle(); paintMini(); } }, icon('pause'));
+  // la barra del tiempo, fina y a lo ancho abajo del todo (la grande no sale aquí: molesta)
+  const miniProg = h('div.mprog', null, h('i'));
+  const closeMini = () => { Player.close(); mini.hidden = true; mini.style.transform = ''; mini.style.opacity = ''; };
   mini.append(miniHost, h('div.mbar', null, h('div.t', { onclick: () => expand() }, miniTitle, miniSub), miniPlay,
-    h('button.ib', { 'aria-label': 'Cerrar', onclick: e => { e.stopPropagation(); Player.close(); mini.hidden = true; } }, icon('close'))));
+    h('button.ib', { 'aria-label': 'Cerrar', onclick: e => { e.stopPropagation(); closeMini(); } }, icon('close'))), miniProg);
+  const paintProg = () => { if (mini.hidden) return; const d = Player.duration; miniProg.firstChild.style.width = (d ? Math.min(100, Player.time / d * 100) : 0) + '%'; };
+  for (const m of [Player.video, Player.audio]) m.addEventListener('timeupdate', paintProg);
+  // deslizar el mini reproductor a un lado: se cierra (como YouTube)
+  let mx0 = null, mdx = 0;
+  mini.addEventListener('touchstart', e => { if (e.target.closest('button')) { mx0 = null; return; } mx0 = e.touches[0].clientX; mdx = 0; mini.style.transition = 'none'; }, { passive: true });
+  mini.addEventListener('touchmove', e => { if (mx0 == null) return; mdx = e.touches[0].clientX - mx0; if (Math.abs(mdx) > 8) { mini.style.transform = `translateX(${mdx}px)`; mini.style.opacity = String(1 - Math.min(.8, Math.abs(mdx) / innerWidth)); } }, { passive: true });
+  mini.addEventListener('touchend', () => {
+    if (mx0 == null) return;
+    mx0 = null; mini.style.transition = 'transform .2s ease, opacity .2s';
+    if (Math.abs(mdx) > innerWidth * 0.3) { mini.style.transform = `translateX(${mdx > 0 ? innerWidth : -innerWidth}px)`; mini.style.opacity = '0'; M4.haptic('tick'); setTimeout(() => { mini.style.transition = ''; closeMini(); }, 200); }
+    else { mini.style.transform = ''; mini.style.opacity = ''; setTimeout(() => { mini.style.transition = ''; }, 220); }
+  }, { passive: true });
   function showMini() {
     if (!Player.item) { mini.hidden = true; return; }
     Player.mount(miniHost);
     mini.hidden = false;
-    paintMini();
+    paintMini(); paintProg();
   }
   function paintMini() {
     const it = Player.item;
@@ -155,20 +203,53 @@ const App = (() => {
       if ($('#main').scrollTop > 10) $('#main').scrollTo({ top: 0, behavior: 'smooth' }); else M4.render();
     }
   }));
-  // mantener pulsado un vídeo: su menú
-  let lpT = 0, lpX = 0, lpY = 0, lpFired = false;
+  // menús de cada cosa: clic derecho en el PC, mantener pulsado en el móvil
+  // (vídeos, listas, canales, el mini reproductor y el propio vídeo)
+  function menuFor(t) {
+    for (let x = t; x && x !== document.body; x = x.parentElement) {
+      if (x._menu) return x._menu;
+      if (x.matches && x.matches('a[href^="#/channel/"]') && !x.closest('.card')) {
+        const id = decodeURIComponent(x.getAttribute('href').slice(10).split(/[/?]/)[0]);
+        return a => Views.channelMenu(id, (x.textContent || '').trim().slice(0, 40), a);
+      }
+    }
+    return null;
+  }
+  mini._menu = a => M4.popMenu(a, [{ icon: 'expand', label: 'Ver en grande', fn: expand }, { icon: Player.playing ? 'pause' : 'play', label: Player.playing ? 'Pausar' : 'Seguir viendo', fn: () => { Player.toggle(); paintMini(); } },
+    { icon: 'next', label: 'Siguiente', fn: () => Player.next() }, '-', { icon: 'close', label: 'Cerrar', fn: closeMini }]);
+  let lastTouchAt = 0;
+  document.addEventListener('contextmenu', e => {
+    if (e.target.closest('input,textarea,[contenteditable]')) return;
+    // el vídeo: su propio menú (calidad, velocidad, temporizador…)
+    if (e.target.closest('.player') && !e.target.closest('#mini')) {
+      e.preventDefault();
+      if (Date.now() - lastTouchAt > 1000 && Player.item) Player.openMenu('main');
+      return;
+    }
+    const fn = menuFor(e.target);
+    if (!fn) return;
+    e.preventDefault();
+    if (Date.now() - lastTouchAt < 1000) return; // en el móvil ya se encarga «mantener pulsado»
+    fn({ x: e.clientX, y: e.clientY });
+  });
+  let lpT = 0, lpX = 0, lpY = 0, lpFired = false, lpEl = null, lpAt = 0;
   document.addEventListener('touchstart', e => {
-    const c = e.target.closest('#view .card, #mini');
+    lastTouchAt = Date.now();
     lpFired = false;
-    if (!c || c.id === 'mini' || e.target.closest('.player')) return;
-    const t = e.touches[0]; lpX = t.clientX; lpY = t.clientY;
     clearTimeout(lpT);
-    lpT = setTimeout(() => { const m = c.querySelector('.more'); if (m) { lpFired = true; m.click(); } }, 520);
+    if (e.touches.length > 1 || (e.target.closest('.player') && !e.target.closest('#mini')) || e.target.closest('button:not(.more),input,.chips,.mprog')) return;
+    const fn = menuFor(e.target);
+    if (!fn) return;
+    const t = e.touches[0]; lpX = t.clientX; lpY = t.clientY;
+    lpEl = e.target.closest('.card,.chan-card,#mini,a') || e.target;
+    lpEl.classList.add('lp-arm');
+    lpT = setTimeout(() => { lpFired = true; lpAt = Date.now(); lpEl.classList.remove('lp-arm'); lpEl.classList.add('lp-go'); setTimeout(() => lpEl && lpEl.classList.remove('lp-go'), 300); fn({ x: lpX, y: lpY }); }, 480);
   }, { passive: true });
-  document.addEventListener('touchmove', e => { const t = e.touches[0]; if (Math.abs(t.clientX - lpX) > 10 || Math.abs(t.clientY - lpY) > 10) clearTimeout(lpT); }, { passive: true });
-  document.addEventListener('touchend', () => clearTimeout(lpT), { passive: true });
-  document.addEventListener('click', e => { if (lpFired && e.target.closest('#view .card')) { e.preventDefault(); e.stopPropagation(); lpFired = false; } }, true);
-  document.addEventListener('contextmenu', e => { if (e.target.closest('#view .card')) e.preventDefault(); });
+  const lpCancel = () => { clearTimeout(lpT); if (lpEl) lpEl.classList.remove('lp-arm'); };
+  document.addEventListener('touchmove', e => { const t = e.touches[0]; if (Math.abs(t.clientX - lpX) > 10 || Math.abs(t.clientY - lpY) > 10) lpCancel(); }, { passive: true });
+  document.addEventListener('touchend', lpCancel, { passive: true });
+  document.addEventListener('touchcancel', lpCancel, { passive: true });
+  document.addEventListener('click', e => { if (lpFired || Date.now() - lpAt < 700) { e.preventDefault(); e.stopPropagation(); lpFired = false; } }, true);
   // tirar hacia abajo para refrescar (inicio, suscripciones, mis vídeos…)
   const ptr = h('div.ptr', null, icon('refresh'));
   document.body.append(ptr);
