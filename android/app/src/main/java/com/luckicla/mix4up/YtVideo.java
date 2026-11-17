@@ -603,14 +603,22 @@ final class YtVideo {
         out.flush();
     }
 
-    static JSONObject progress(String id) {
+    /** cuánto hay bajado de cada calidad. keep: las que usa el reproductor (mientras el vídeo esté abierto,
+     *  aunque esté en pausa, se siguen bajando enteras, como hace YouTube) */
+    static JSONObject progress(String id, String keep) {
         JSONObject o = new JSONObject();
+        java.util.Set<String> ks = new java.util.HashSet<>(java.util.Arrays.asList(keep.split(",")));
+        java.util.List<CacheFile> wake = new java.util.ArrayList<>();
         synchronized (files) {
             for (CacheFile c : files.values()) {
                 if (!c.id.equals(id)) continue;
-                synchronized (c) { try { o.put(c.fid, 1 - (double) c.left / c.have.length); } catch (Exception ignored) {} }
+                synchronized (c) {
+                    try { o.put(c.fid, 1 - (double) c.left / c.have.length); } catch (Exception ignored) {}
+                    if (ks.contains(c.fid) && c.err == null) { c.used = System.currentTimeMillis(); if (c.workers == 0 && c.left > 0) wake.add(c); }
+                }
             }
         }
+        for (CacheFile c : wake) start(c);
         return o;
     }
 

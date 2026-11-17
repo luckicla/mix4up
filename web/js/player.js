@@ -91,7 +91,7 @@ const Player = (() => {
     goingBack = false;
     stopAll();
     item = { ...it };
-    stuckAt = 0; stuckT = -1; stuckStep = 0; lastErrAt = 0; clearTimeout(upT);
+    stuckAt = 0; stuckT = -1; stuckStep = 0; lastErrAt = 0; clearTimeout(upT); keepAlso = [];
     info = null; split = false; twin = false; pendingStart = 0; compat = false; cacheP = 0; offset = 0; tries = 0; histDone = false; ytMarked = false; startedAt = 0;
     ab = { a: null, b: null }; updateAB();
     clearErr(); hideResume(); hideNextUp();
@@ -384,16 +384,18 @@ const Player = (() => {
   }, 2000);
 
   // bajar a 360p (imagen y sonido juntos) un rato; al minuto, si el vídeo sigue, se vuelve a la calidad de antes
-  let lastErrAt = 0, upT = 0;
+  let lastErrAt = 0, upT = 0, keepAlso = [];
   function toMux(mux, t, msg) {
     const before = qual, id = item && item.id;
+    // la calidad buena se sigue bajando mientras tanto: al volver a ella ya estará lista
+    keepAlso = [before.v && before.v.id, before.a && before.a.id];
     qual = { v: mux, a: null, h: mux.h };
     applyQuality(t, false);
     toast(msg);
     clearTimeout(upT);
     upT = setTimeout(() => {
       if (!item || item.id !== id || !info || qual.v !== mux || !want || document.hidden) return;
-      qual = before; tries = 0; stuckStep = 0;
+      qual = before; tries = 0; stuckStep = 0; keepAlso = [];
       audio.removeAttribute('src');
       applyQuality(now(), false);
     }, 60000);
@@ -450,7 +452,9 @@ const Player = (() => {
   setInterval(async () => {
     if (!item || item.src !== 'yt' || !qual || cacheP >= 1) return;
     try {
-      const p = await api('/api/yt/cache?id=' + item.id);
+      // (le dice qué calidades se están usando: así se siguen bajando aunque esté en pausa)
+      const keep = [qual.v.id, qual.a && qual.a.id, ...keepAlso].filter(Boolean).join(',');
+      const p = await api('/api/yt/cache?id=' + item.id + '&keep=' + encodeURIComponent(keep));
       const v = p[qual.v.id] || 0, a = qual.a ? (p[qual.a.id] || 0) : v;
       cacheP = Math.min(v, a);
       paintBuf();

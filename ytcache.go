@@ -494,17 +494,33 @@ func cacheComplete(id, fid string) string {
 }
 
 // progreso de la caché de un vídeo (para la barra gris del reproductor)
-func cacheProgress(id string) map[string]float64 {
+// cacheProgress: cuánto hay bajado de cada calidad. keep: las que está usando el reproductor
+// (mientras el vídeo esté abierto, aunque esté en pausa, se siguen bajando enteras, como hace YouTube)
+func cacheProgress(id, keep string) map[string]float64 {
 	out := map[string]float64{}
+	keepSet := map[string]bool{}
+	for _, f := range strings.Split(keep, ",") {
+		keepSet[f] = f != ""
+	}
+	var wake []*ytCacheFile
 	ytCache.Lock()
-	defer ytCache.Unlock()
 	for k, c := range ytCache.files {
 		if c.id != id {
 			continue
 		}
 		c.mu.Lock()
 		out[strings.TrimPrefix(k, id+"/")] = 1 - float64(c.left)/float64(len(c.have))
+		if keepSet[c.fid] && c.err == nil {
+			c.used = time.Now()
+			if c.workers == 0 && c.left > 0 {
+				wake = append(wake, c)
+			}
+		}
 		c.mu.Unlock()
+	}
+	ytCache.Unlock()
+	for _, c := range wake {
+		c.start()
 	}
 	return out
 }

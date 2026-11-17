@@ -68,7 +68,9 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/api/yt/suggest", s.ytSuggest)
 	mux.HandleFunc("/api/yt/tools", s.ytTools)
 	mux.HandleFunc("/ytstream/", s.ytStream)
-	mux.HandleFunc("/api/yt/cache", func(w http.ResponseWriter, r *http.Request) { jsonOut(w, cacheProgress(r.URL.Query().Get("id"))) })
+	mux.HandleFunc("/api/yt/cache", func(w http.ResponseWriter, r *http.Request) {
+		jsonOut(w, cacheProgress(r.URL.Query().Get("id"), r.URL.Query().Get("keep")))
+	})
 	mux.HandleFunc("/api/download", s.dl.api)
 	// el móvil
 	mux.HandleFunc("/api/lan", s.lanAPI)

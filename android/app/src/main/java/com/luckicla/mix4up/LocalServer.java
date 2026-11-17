@@ -124,7 +124,7 @@ final class LocalServer {
         else if (p.equals("/api/yt/list")) YtVideo.list(r, out);
         else if (p.equals("/api/yt/watched")) YtVideo.watched(r, out);
         else if (p.equals("/api/yt/suggest")) YtAccount.suggest(r, out);
-        else if (p.equals("/api/yt/cache")) Http.json(out, YtVideo.progress(r.param("id")));
+        else if (p.equals("/api/yt/cache")) Http.json(out, YtVideo.progress(r.param("id"), r.param("keep")));
         else if (p.equals("/api/yt/tools")) { if (r.method.equals("POST")) YtVideo.forceUpdate(); Http.json(out, YtVideo.tools()); }
         else if (p.startsWith("/ytstream/")) {
             String[] parts = p.substring(10).split("/", 2);
