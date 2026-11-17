@@ -62,6 +62,12 @@ def local_video(ev, secs=25):
     vid = ev("(Views.local().videos.find(v => v.native) || {}).id || ''")
     ev(f"location.hash = '#/watch?lid={vid}'")
     st = until(lambda: (lambda p: p if p.get('t', 0) > 2 and p.get('playing') else None)(player(ev)), secs, 1)
+    if not st:
+        # por qué no: el estado del vídeo y lo que contesta el servidor
+        diag = ev("""(async () => { const v = Player.video; let probe = '';
+          try { const r = await fetch(v.getAttribute('src'), { headers: { Range: 'bytes=0-1023' } }); probe = r.status + ' ' + r.headers.get('content-type') + ' ' + r.headers.get('content-range') + ' ' + (await r.arrayBuffer()).byteLength; } catch (e) { probe = 'ERR ' + e; }
+          return JSON.stringify({ rs: v.readyState, ns: v.networkState, err: v.error && (v.error.code + ' ' + v.error.message), paused: v.paused, canMp4: v.canPlayType('video/mp4; codecs=\\"avc1.640028\\"'), probe }) })()""")
+        say('diagnóstico del vídeo:', diag)
     res('Un vídeo tuyo se ve', 'OK' if st else 'FALLO', json.dumps(st or player(ev), ensure_ascii=False))
     thumbs = until(lambda: ev("fetch('/thumb/' + Views.local().videos[0].id).then(r => r.status)") == 200 or None, 30, 2)
     res('Miniaturas de tus vídeos', 'OK' if thumbs else 'AVISO', '' if thumbs else 'aún sin miniatura')

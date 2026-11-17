@@ -138,8 +138,10 @@ try:
     main()
 finally:
     for l in adb('logcat', '-d', '-v', 'brief').splitlines():
-        if re.search(r'Uncaught|AndroidRuntime|FATAL|Mix4Up', l):
+        if re.search(r'Uncaught|AndroidRuntime|FATAL|Mix4Up|chromium|cr_Media|MediaCodec|CCodec|VideoCapabilities', l):
             print('LOGCAT', l[:400], flush=True)
+    for l in adb('shell', 'run-as', PKG, 'tail', '-n', '80', 'files/diag.log').splitlines():
+        print('DIAG', l[:400], flush=True)
     open(os.path.join(OUT, 'logcat.txt'), 'w').write(adb('logcat', '-d', '-v', 'time'))
     open(os.path.join(OUT, 'diag.txt'), 'w').write(adb('shell', 'run-as', PKG, 'cat', 'files/diag.log'))
     ok = checks.summary(os.path.join(OUT, 'resumen.txt'))
