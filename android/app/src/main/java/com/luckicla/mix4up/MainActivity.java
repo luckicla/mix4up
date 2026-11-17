@@ -197,6 +197,9 @@ public class MainActivity extends Activity {
             bootCore(this);
             setContentView(web);
         }
+        edge(this);
+        web.setOnApplyWindowInsetsListener((v, ins) -> { sendInsets(ins); return ins; });
+        web.requestApplyInsets();
         askPermissions();
     }
 
@@ -328,12 +331,48 @@ public class MainActivity extends Activity {
         // en pantalla completa el vídeo ocupa también la zona de la cámara
         if (Build.VERSION.SDK_INT >= 28) {
             WindowManager.LayoutParams lp = w.getAttributes();
-            lp.layoutInDisplayCutoutMode = on ? (Build.VERSION.SDK_INT >= 30 ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES)
-                                              : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+            lp.layoutInDisplayCutoutMode = on && Build.VERSION.SDK_INT >= 30 ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
             w.setAttributes(lp);
         }
-        if (Build.VERSION.SDK_INT >= 30) w.setDecorFitsSystemWindows(!on);
+        if (!on) edge(a);
+        if (web != null) web.requestApplyInsets();
         a.setRequestedOrientation(on ? (landscape ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT) : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+    }
+
+    /* ---------- la app hasta los bordes (debajo de la barra de notificaciones y de la cámara) ---------- */
+    private static boolean lightBars = false;
+    private static volatile float insTop = -1, insBottom = 0;
+    static void edge(Activity a) {
+        Window w = a.getWindow();
+        w.setStatusBarColor(Color.TRANSPARENT);
+        w.setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= 29) { w.setStatusBarContrastEnforced(false); w.setNavigationBarContrastEnforced(false); }
+        if (Build.VERSION.SDK_INT >= 28) {
+            WindowManager.LayoutParams lp = w.getAttributes();
+            if (!fullscreen) { lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES; w.setAttributes(lp); }
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            w.setDecorFitsSystemWindows(false);
+            WindowInsetsController ic = w.getInsetsController();
+            if (ic != null) ic.setSystemBarsAppearance(lightBars ? WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS : 0,
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+        } else if (!fullscreen) {
+            int f = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+            if (lightBars && Build.VERSION.SDK_INT >= 26) f |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            w.getDecorView().setSystemUiVisibility(f);
+        }
+    }
+    @SuppressWarnings("deprecation")
+    private static void sendInsets(WindowInsets ins) {
+        int top, bottom;
+        if (Build.VERSION.SDK_INT >= 30) {
+            int types = WindowInsets.Type.systemBars() | (fullscreen ? 0 : WindowInsets.Type.displayCutout());
+            android.graphics.Insets i = ins.getInsets(types);
+            top = i.top; bottom = i.bottom;
+        } else { top = ins.getSystemWindowInsetTop(); bottom = ins.getSystemWindowInsetBottom(); }
+        float d = app.getResources().getDisplayMetrics().density;
+        insTop = fullscreen ? 0 : top / d; insBottom = fullscreen ? 0 : bottom / d;
+        js("window.M4insets && M4insets(" + insTop + "," + insBottom + ")");
     }
 
     /* ---------- actualizarse sola ---------- */
@@ -530,18 +569,13 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void share(String text) {
             try { app.startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Compartir").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) {}
         }
+        @JavascriptInterface public String getInsets() { return insTop < 0 ? "{}" : "{\"top\":" + insTop + ",\"bottom\":" + insBottom + "}"; }
         @JavascriptInterface public void setBars(String hex, boolean light) {
             withWindow(a -> {
                 try {
-                    int c = Color.parseColor(hex.length() == 4 ? "#" + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2) + hex.charAt(3) + hex.charAt(3) : hex);
-                    a.getWindow().setStatusBarColor(c); a.getWindow().setNavigationBarColor(c);
-                    if (Build.VERSION.SDK_INT >= 30) {
-                        WindowInsetsController ic = a.getWindow().getInsetsController();
-                        if (ic != null) ic.setSystemBarsAppearance(light ? WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS : 0,
-                                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
-                    } else if (Build.VERSION.SDK_INT >= 26) {
-                        a.getWindow().getDecorView().setSystemUiVisibility(light ? View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0);
-                    }
+                    // (las barras son transparentes: la página se ve por debajo; aquí solo el color de los iconos)
+                    lightBars = light;
+                    if (!fullscreen) edge(a);
                 } catch (Exception ignored) {}
             });
         }

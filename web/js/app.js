@@ -24,14 +24,24 @@ const App = (() => {
   // la pastilla de la pestaña elegida se desliza de una a otra
   const tabInd = h('i.tabind');
   $('#tabs').prepend(tabInd);
+  let tabX = null;
   function moveTabInd(instant) {
     const on = $('#tabs a.on');
     if (!on || !$('#tabs').offsetWidth) { tabInd.style.opacity = '0'; return; }
     const x = on.offsetLeft + on.offsetWidth / 2;
-    if (instant) tabInd.style.transition = 'none';
     tabInd.style.opacity = '1';
     tabInd.style.transform = `translateX(${x}px) translateX(-50%)`;
-    if (instant) { void tabInd.offsetWidth; tabInd.style.transition = ''; }
+    // de una pestaña a otra: la pastilla se estira hacia donde va y luego se recoge (como una gota)
+    if (!instant && tabX != null && tabX !== x && tabInd.animate) {
+      const w = tabInd.offsetWidth, d = x - tabX, mid = tabX + d * 0.5, stretch = 1 + Math.min(1.6, Math.abs(d) / w * 0.55);
+      tabInd.animate([
+        { transform: `translateX(${tabX}px) translateX(-50%) scaleX(1)` },
+        { transform: `translateX(${mid}px) translateX(-50%) scaleX(${stretch}) scaleY(.86)`, offset: 0.45 },
+        { transform: `translateX(${x + d * 0.04}px) translateX(-50%) scaleX(.92) scaleY(1.06)`, offset: 0.8 },
+        { transform: `translateX(${x}px) translateX(-50%) scaleX(1)` },
+      ], { duration: 420, easing: 'cubic-bezier(.3,.7,.3,1)' });
+    }
+    tabX = x;
   }
   let tabFirst = true;
   addEventListener('resize', () => moveTabInd(true));
@@ -176,6 +186,13 @@ const App = (() => {
   Player.video.addEventListener('play', paintMini); Player.video.addEventListener('pause', paintMini);
   Player.audio.addEventListener('play', paintMini); Player.audio.addEventListener('pause', paintMini);
 
+  // recién actualizada: avisar (y en el móvil, además, llega una notificación)
+  function updatedNotice(ver) {
+    if (!ver) return;
+    const short = ver.split('.').slice(0, 3).join('.'), seen = M4.store.get('seenVer');
+    M4.store.set('seenVer', short);
+    if (seen && seen !== short) setTimeout(() => toast('Mix4Up se ha actualizado a la versión ' + short, { ms: 6000 }), 1500);
+  }
   // deslizar el vídeo hacia abajo: se hace pequeño (y sigue sonando)
   // (vuelve a la última página que no era un vídeo, nunca al vídeo anterior)
   let lastPage = '/';
@@ -197,6 +214,8 @@ const App = (() => {
     lastY = y;
   }, { passive: true });
   M4.on('route', () => document.body.classList.remove('top-hidden'));
+  // (viendo un vídeo, la barra de arriba del móvil en negro, como el vídeo)
+  M4.on('route', () => setTimeout(M4.barsFor, 30));
   // el móvil sabe si estás viendo un vídeo: al salir con «inicio», ventanita (como YouTube)
   const tellWatching = () => { if (!ANDROID) return; try { Mix4UpAndroid.setWatching(location.hash.startsWith('#/watch') && Settings.get().autoPip !== false); } catch {} };
   M4.on('route', tellWatching); M4.on('watching', tellWatching);
@@ -346,6 +365,7 @@ const App = (() => {
     M4.emit('ready');
     const info = await api('/api/info').catch(() => ({}));
     $('#verLabel').textContent = info.version ? 'Versión ' + info.version.split('.').slice(0, 3).join('.') : '';
+    updatedNotice(info.version);
     await YT.account();
     if (!location.hash || location.hash === '#/') Views.preloadHome();
     // la cuenta sigue guardada pero YouTube ya no la reconoce: avisar (si no, el inicio sale genérico sin saber por qué)

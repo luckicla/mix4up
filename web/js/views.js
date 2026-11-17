@@ -614,7 +614,7 @@ const Views = (() => {
     const v = setView('wide', h('div.watch' + (theater ? '.theater' : ''), null,
       h('div.primary', null, host, h('div.info', null, titleEl, metaEl, h('div.vbar', null, ownerEl, actsEl), chapEl, descEl)),
       h('div.secondary', null, plBox, h('div.upnext', null, h('h3', null, it.src === 'local' ? 'Más de tus vídeos' : 'Siguientes'), autoSw), relEl)));
-    document.body.classList.add('watching');
+    document.body.classList.add('watching'); M4.barsFor();
     Player.mount(host);
     $('#mini').hidden = true;
     const same = Player.item && Player.keyOf(Player.item) === Player.keyOf(it) && Player.item.src === it.src;

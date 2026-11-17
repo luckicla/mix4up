@@ -1107,6 +1107,8 @@ const Player = (() => {
   }
 
   M4.on('settings', p => { if ('volume' in p || 'muted' in p) applyVolume(); if ('theater' in p) bTheater.classList.toggle('on', !!Settings.get().theater); });
+  // pantalla completa como YouTube: el vídeo entero con bordes negros (pellizcar lo amplía)
+  M4.on('ready', () => { if (!Settings.get().fsFitV1) Settings.set({ fillScreen: false, fsFitV1: 1 }, true); el.classList.toggle('fill', !!Settings.get().fillScreen); });
   M4.on('ready', () => { rate = +Settings.get().speed || 1; applySpeed(); applyVolume(); applyCue(); bTheater.classList.toggle('on', !!Settings.get().theater); });
 
   function mount(host) { if (el.parentNode !== host) host.append(el); wake(); }

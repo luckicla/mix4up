@@ -37,7 +37,7 @@ const M4 = (() => {
     theme: 'dark', accent: '#ff2e88', accent2: '#c8ff00', radius: 12, density: 'normal', font: 'system', cardStyle: 'round',
     autoplay: true, quality: 'auto', qualityCap: ANDROID ? 720 : 1080, speed: 1, subs: false, subLang: 'es', subSize: 100,
     strictShorts: true, volume: 1, muted: false, autoUpdate: true, theater: false, resume: true, markWatched: true,
-    syncLook: false, gestures: true, haptics: true, navStyle: 'float', navAlpha: 72, homeSource: 'auto', sleepAction: 'pause', bgPlay: true, autoPip: true, fillScreen: true, lookVer: 0,
+    syncLook: false, gestures: true, haptics: true, navStyle: 'float', navAlpha: 72, homeSource: 'auto', sleepAction: 'pause', bgPlay: true, autoPip: true, fillScreen: false, lookVer: 0,
   };
   let settings = { ...DEFAULTS }, saveT = 0;
   const Settings = {
@@ -70,6 +70,21 @@ const M4 = (() => {
     const r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
     return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '#111' : '#fff';
   }
+  // márgenes de arriba y abajo que manda el móvil (la app se dibuja debajo de la barra de
+  // notificaciones y de la cámara, y de la barra de gestos de abajo)
+  function setInsets(top, bottom) {
+    let st = document.getElementById('m4ins');
+    if (!st) { st = document.createElement('style'); st.id = 'm4ins'; document.head.append(st); }
+    st.textContent = `:root{--sat:${Math.max(0, +top || 0)}px;--sab:${Math.max(0, +bottom || 0)}px}`;
+  }
+  window.M4insets = setInsets;
+  if (ANDROID) try { const i = JSON.parse(Mix4UpAndroid.getInsets() || '{}'); if (i.top != null) setInsets(i.top, i.bottom); } catch {}
+  function barsFor() {
+    if (!ANDROID) return;
+    const d = document.documentElement;
+    const watching = document.body && document.body.classList.contains('watching');
+    try { Mix4UpAndroid.setBars(watching ? '#000000' : getComputedStyle(d).getPropertyValue('--bg').trim() || '#0f0f13', !watching && settings.theme === 'light'); } catch {}
+  }
   function applyLook() {
     const s = settings, d = document.documentElement;
     d.dataset.theme = s.theme;
@@ -81,7 +96,7 @@ const M4 = (() => {
     const css = Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(';');
     d.setAttribute('style', css);
     try { localStorage.setItem('m4.look', JSON.stringify({ css, theme: s.theme, nav: s.navStyle || 'float' })); } catch {}
-    if (ANDROID) try { Mix4UpAndroid.setBars(getComputedStyle(d).getPropertyValue('--bg').trim() || '#0f0f13', s.theme === 'light'); } catch {}
+    barsFor();
   }
   on('settings', p => { if (['theme', 'accent', 'accent2', 'radius', 'density', 'font', 'navStyle', 'navAlpha'].some(k => k in p)) applyLook(); });
 
@@ -325,6 +340,6 @@ const M4 = (() => {
 
   return {
     ANDROID, DESKTOP, $, $$, on, emit, haptic, api, Settings, h, icon, esc, dur, parseDur, views, ago, toast, modal, confirm, prompt,
-    popMenu, closePop, sheet, closeTop, pushClose, route, go, render, parseHash, failView, errorBox, dev, deviceName, store, copy, debounce, applyLook,
+    barsFor, popMenu, closePop, sheet, closeTop, pushClose, route, go, render, parseHash, failView, errorBox, dev, deviceName, store, copy, debounce, applyLook,
   };
 })();
