@@ -60,6 +60,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/api/yt/cfg", s.yt.cfg)
 	mux.HandleFunc("/api/yt/account", s.yt.account)
 	mux.HandleFunc("/api/yt/cookies", s.yt.cookiesAPI)
+	mux.HandleFunc("/api/yt/frombrowser", s.ytFromBrowser)
 	mux.HandleFunc("/api/yt/video", s.ytVideo)
 	mux.HandleFunc("/api/yt/sub", s.ytSub)
 	mux.HandleFunc("/api/yt/list", s.ytList)

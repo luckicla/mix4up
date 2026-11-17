@@ -102,6 +102,11 @@ const SettingsPage = (() => {
         h('small', null, cfg.connected ? 'Tu inicio, suscripciones, historial y listas vienen de tu cuenta. La sesión se guarda solo en este aparato.' : 'Conéctala para ver tus recomendaciones (sin Shorts), suscripciones, historial y listas.')),
         cfg.connected ? h('div.btns', null, h('button.btn', { onclick: connect }, 'Volver a conectar'), h('button.btn.ghost', { onclick: disconnect }, 'Desconectar'))
           : h('button.btn.acc', { onclick: connect }, 'Conectar con YouTube')),
+      ANDROID ? '' : h('div.set', null, h('span', null, 'Con la sesión de tu navegador', h('small', null, 'Si ya tienes YouTube abierto en el navegador del PC (mejor Firefox), Mix4Up puede usar esa sesión.')),
+        h('div.btns', null, ...[['firefox', 'Firefox'], ['chrome', 'Chrome'], ['edge', 'Edge']].map(([b, n]) => h('button.btn.ghost', { onclick: async e => {
+          const btn = e.currentTarget; btn.disabled = true; toast('Leyendo la sesión de ' + n + '… (ciérralo si da error)');
+          try { await api('/api/yt/frombrowser?b=' + b, { method: 'POST' }); await afterLogin(); } catch (err) { toast(err.message, { ms: 7000 }); } finally { btn.disabled = false; }
+        } }, n)))),
       !DESKTOP && !ANDROID ? '' : h('div.set', null, h('span', null, 'Con un archivo de cookies', h('small', null, 'Por si el inicio de sesión de Google no deja entrar desde aquí.')), h('button.btn.ghost', { onclick: importCookies }, 'Elegir cookies.txt')),
       sw('markWatched', 'Contar en tu historial de YouTube lo que ves aquí', 'Así YouTube aprende de lo que ves en Mix4Up y te recomienda mejor.')));
 

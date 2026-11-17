@@ -573,3 +573,46 @@ func (s *server) ytSuggest(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOut(w, out)
 }
+
+// /api/yt/frombrowser?b=firefox|chrome|edge|brave|opera (POST): la sesión de
+// YouTube del navegador del PC donde ya la tienes abierta (con yt-dlp)
+func (s *server) ytFromBrowser(w http.ResponseWriter, r *http.Request) {
+	b := r.URL.Query().Get("b")
+	if r.Method != http.MethodPost || !regexp.MustCompile(`^(firefox|chrome|edge|brave|opera|vivaldi|chromium)$`).MatchString(b) {
+		http.Error(w, "bad", http.StatusBadRequest)
+		return
+	}
+	tmp := filepath.Join(s.dataDir, "navegador-cookies.txt")
+	defer os.Remove(tmp)
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	_, err := ytRun(ctx, "--ignore-config", "--no-warnings", "--cookies-from-browser", b, "--cookies", tmp, "--skip-download", "--flat-playlist", "--", "https://www.youtube.com/feed/library")
+	data, rerr := os.ReadFile(tmp)
+	if rerr != nil {
+		msg := "No se pudo leer la sesión de " + b
+		if err != nil {
+			msg += ": " + friendly(err)
+		}
+		http.Error(w, msg, http.StatusBadGateway)
+		return
+	}
+	var list []ytCookie
+	for _, c := range parseNetscape(data) {
+		if strings.HasSuffix(c.Domain, "youtube.com") {
+			list = append(list, c)
+		}
+	}
+	s.yt.mu.Lock()
+	s.yt.cookies = list
+	s.yt.saveLocked()
+	s.yt.mu.Unlock()
+	s.yt.cfgMu.Lock()
+	s.yt.cfgAt = time.Time{}
+	s.yt.cfgMu.Unlock()
+	if !s.yt.connected() {
+		http.Error(w, "En "+b+" no hay una sesión de YouTube abierta", http.StatusNotFound)
+		return
+	}
+	logf("yt: sesión traída de %s", b)
+	jsonOut(w, map[string]any{"connected": true})
+}
