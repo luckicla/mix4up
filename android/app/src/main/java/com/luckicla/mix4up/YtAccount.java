@@ -34,8 +34,8 @@ final class YtAccount {
 
     private static File file;
     private static final List<Cookie> cookies = new ArrayList<>();
-    private static JSONObject cfg;
-    private static long cfgAt;
+    private static volatile JSONObject cfg;
+    private static volatile long cfgAt;
 
     static synchronized void init(File dataDir) {
         file = new File(dataDir, "youtube-cookies.txt");
@@ -184,6 +184,17 @@ final class YtAccount {
     private static final Pattern VER = Pattern.compile("\"INNERTUBE_CLIENT_VERSION\":\"([^\"]+)\""), VIS = Pattern.compile("\"VISITOR_DATA\":\"([^\"]+)\""),
             LOGGED = Pattern.compile("\"LOGGED_IN\":(true|false)"), DSYNC = Pattern.compile("\"DATASYNC_ID\":\"([^\"]*)\""), GL = Pattern.compile("\"GL\":\"([^\"]+)\"");
 
+    /** el visitorData que ya se sepa, sin esperar a bajar la página de YouTube (si no hay, se pide aparte) */
+    private static volatile long cfgTry;
+    static String visitorNow() {
+        JSONObject c = cfg;
+        if ((c == null || System.currentTimeMillis() - cfgAt > 3600_000L) && System.currentTimeMillis() - cfgTry > 60_000L) {
+            cfgTry = System.currentTimeMillis();
+            Thread t = new Thread(() -> { try { cfg(false); } catch (Exception ignored) {} }, "yt-cfg");
+            t.setDaemon(true); t.start();
+        }
+        return c == null ? "" : c.optString("visitorData");
+    }
     static synchronized JSONObject cfg(boolean force) {
         if (!force && cfg != null && System.currentTimeMillis() - cfgAt < 3600_000L) return cfg;
         JSONObject c = new JSONObject();

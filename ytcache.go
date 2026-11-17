@@ -39,6 +39,7 @@ type ytCacheFile struct {
 	f       *os.File
 	have    []bool
 	busy    []bool
+	got     []int64 // lo que ya ha llegado de cada trozo (se manda al vídeo sin esperar al trozo entero)
 	left    int
 	prio    int // trozo por el que empezar (donde se está mirando)
 	used    time.Time
@@ -87,8 +88,10 @@ func cacheFor(id, fid string) (*ytCacheFile, error) {
 		return nil, errors.New("esa calidad ya no está")
 	}
 	size := f.Size
-	// el tamaño exacto, preguntándolo (el de yt-dlp a veces es aproximado)
-	if resp, err := f.fetch(0, 0); err == nil {
+	// el tamaño exacto, preguntándolo (el de yt-dlp a veces es aproximado);
+	// el del camino rápido es el de YouTube: no hace falta (un viaje menos antes de empezar)
+	if in.client == -1 && size > 0 {
+	} else if resp, err := f.fetch(0, 0); err == nil {
 		resp.Body.Close()
 		if n := totalFromRange(resp.Header.Get("Content-Range")); n > 0 {
 			size = n
@@ -122,7 +125,7 @@ func cacheFor(id, fid string) (*ytCacheFile, error) {
 		return nil, err
 	}
 	n := int((size + cacheChunk - 1) / cacheChunk)
-	c = &ytCacheFile{key: key, id: id, fid: fid, path: p, size: size, mime: f.mime, f: file, have: make([]bool, n), busy: make([]bool, n), left: n, used: time.Now(), fmt: f}
+	c = &ytCacheFile{key: key, id: id, fid: fid, path: p, size: size, mime: f.mime, f: file, have: make([]bool, n), busy: make([]bool, n), got: make([]int64, n), left: n, used: time.Now(), fmt: f}
 	c.cond = sync.NewCond(&c.mu)
 	ytCache.Lock()
 	if old := ytCache.files[key]; old != nil { // otro llegó antes
@@ -235,6 +238,10 @@ func (c *ytCacheFile) fetchChunk(f *ytFormat, i int, buf []byte) error {
 		resp, err := f.fetch(from, to)
 		if err != nil {
 			lastErr = err
+			// rechazado (403…): sin esperas, a renovar la dirección
+			if strings.HasPrefix(err.Error(), "youtube: ") {
+				return err
+			}
 			continue
 		}
 		pos := from
@@ -249,6 +256,12 @@ func (c *ytCacheFile) fetchChunk(f *ytFormat, i int, buf []byte) error {
 					return werr
 				}
 				pos += int64(n)
+				c.mu.Lock()
+				if g := pos - int64(i)*cacheChunk; g > c.got[i] {
+					c.got[i] = g
+					c.cond.Broadcast()
+				}
+				c.mu.Unlock()
 			}
 			if rerr != nil {
 				break
@@ -333,8 +346,8 @@ func (c *ytCacheFile) serve(w http.ResponseWriter, r *http.Request) {
 	c.used = time.Now()
 	c.mu.Unlock()
 	c.start()
-	// el primer trozo antes de contestar (si falla, un error de verdad)
-	if err := c.wait(int(start/cacheChunk), r); err != nil {
+	// los primeros bytes antes de contestar (si falla, un error de verdad); antes: el trozo entero de 2 MB
+	if _, err := c.wait(start, r); err != nil {
 		http.Error(w, "YouTube no dio el vídeo: "+friendly(err), http.StatusBadGateway)
 		return
 	}
@@ -354,12 +367,13 @@ func (c *ytCacheFile) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	buf := make([]byte, 128<<10)
 	pos := start
+	fl, _ := w.(http.Flusher)
 	for pos <= end {
-		i := int(pos / cacheChunk)
-		if err := c.wait(i, r); err != nil {
+		avail, err := c.wait(pos, r)
+		if err != nil {
 			return
 		}
-		chunkEnd := min(end, int64(i+1)*cacheChunk-1)
+		chunkEnd := min(end, avail-1)
 		for pos <= chunkEnd {
 			n := int(min(int64(len(buf)), chunkEnd-pos+1))
 			m, err := c.f.ReadAt(buf[:n], pos)
@@ -373,13 +387,19 @@ func (c *ytCacheFile) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if fl != nil {
+			fl.Flush()
+		}
 		c.mu.Lock()
 		c.used = time.Now()
 		c.mu.Unlock()
 	}
 }
 
-func (c *ytCacheFile) wait(i int, r *http.Request) error {
+// wait: hasta que haya algo a partir de pos; devuelve hasta dónde (sin incluir) se puede leer ya
+func (c *ytCacheFile) wait(pos int64, r *http.Request) (int64, error) {
+	i := int(pos / cacheChunk)
+	base := int64(i) * cacheChunk
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
@@ -394,15 +414,15 @@ func (c *ytCacheFile) wait(i int, r *http.Request) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	deadline := time.Now().Add(60 * time.Second)
-	for !c.have[i] {
+	for !c.have[i] && base+c.got[i] <= pos {
 		if c.err != nil {
-			return c.err
+			return 0, c.err
 		}
 		if r.Context().Err() != nil {
-			return r.Context().Err()
+			return 0, r.Context().Err()
 		}
 		if time.Now().After(deadline) {
-			return errors.New("YouTube va muy lento")
+			return 0, errors.New("YouTube va muy lento")
 		}
 		if c.workers == 0 {
 			c.mu.Unlock()
@@ -412,7 +432,10 @@ func (c *ytCacheFile) wait(i int, r *http.Request) error {
 		go func() { time.Sleep(time.Second); c.mu.Lock(); c.cond.Broadcast(); c.mu.Unlock() }()
 		c.cond.Wait()
 	}
-	return nil
+	if c.have[i] {
+		return min(c.size, base+cacheChunk), nil
+	}
+	return base + c.got[i], nil
 }
 
 // complete: el archivo entero ya bajado (para descargarlo sin volver a bajarlo)

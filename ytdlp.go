@@ -409,13 +409,15 @@ func (y *ytResolver) get(id string, fresh bool) (*ytInfo, error) {
 
 	// primero el camino rápido (ytfast.go); si no, yt-dlp
 	if !fresh && !fastOff() && os.Getenv("MIX4UP_YTDLP") == "" {
+		t0 := time.Now()
 		if in, err := fastInfo(id, ytVisitor()); err == nil {
 			in.client = -1
 			c.info = in
-			fastResult(true)
+			fastResult(true, nil)
+			logf("yt: %s: rápido en %v", id, time.Since(t0).Round(time.Millisecond))
 		} else {
-			logf("yt: %s: %v → yt-dlp", id, err)
-			fastResult(false)
+			logf("yt: %s: %v (%v) → yt-dlp", id, err, time.Since(t0).Round(time.Millisecond))
+			fastResult(false, err)
 		}
 	}
 	if c.info == nil {
@@ -756,7 +758,9 @@ func (s *server) ytVideo(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			ytPrepSem <- struct{}{}
 			defer func() { <-ytPrepSem }()
-			ytdl.get(id, false)
+			if in, err := ytdl.get(id, false); err == nil {
+				in.warm()
+			}
 		}()
 		return
 	}

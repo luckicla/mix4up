@@ -7,8 +7,9 @@ const Views = (() => {
 
   /* ---------- tus vídeos (los de este aparato) ---------- */
   let local = { videos: [], folders: [], downloads: '' }, localAt = 0;
+  const Views_localKnown = () => localAt > 0;
   async function loadLocal(force) {
-    if (!force && Date.now() - localAt < 15000 && local.videos.length) return local;
+    if (!force && Date.now() - localAt < 15000) return local;
     try { local = await api('/api/videos' + (force ? '?rescan=1' : '')); localAt = Date.now(); } catch (e) { if (!local.videos.length) throw e; }
     return local;
   }
@@ -631,7 +632,9 @@ const Views = (() => {
   route(/^\/watch$/, async ({ q, alive }) => {
     const id = q.get('v'), lid = q.get('lid'), pcid = q.get('pc'), list = q.get('list'), mlist = q.get('mlist');
     const t = +q.get('t') || 0;
-    await loadLocal().catch(() => {});
+    // (un vídeo de YouTube no espera a repasar tus carpetas si ya se repasaron antes: se ponen al día de fondo)
+    if (id && Views_localKnown()) loadLocal().catch(() => {});
+    else await loadLocal().catch(() => {});
     let it;
     if (id) {
       if (!YT.ytId(id)) throw new Error('Ese enlace de vídeo no es válido');

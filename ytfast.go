@@ -37,16 +37,33 @@ func fastOff() bool {
 	return time.Now().Before(fast.offTil)
 }
 
-func fastResult(ok bool) {
+func fastResult(ok bool, err error) {
 	fast.Lock()
 	defer fast.Unlock()
 	if ok {
 		fast.fails = 0
 		return
 	}
+	// un vídeo con edad, privado, de miembros… no apaga el camino rápido para los demás
+	if m := err.Error(); strings.Contains(m, "UNPLAYABLE") || strings.Contains(m, "rápido: ERROR") || (strings.Contains(m, "LOGIN_REQUIRED") && !strings.Contains(strings.ToLower(m), "bot")) {
+		return
+	}
 	if fast.fails++; fast.fails >= 3 {
-		fast.offTil = time.Now().Add(30 * time.Minute)
+		fast.offTil = time.Now().Add(5 * time.Minute)
 		fast.fails = 0
+	}
+}
+
+// warm: la conexión con el servidor del vídeo, ya abierta (al darle, empieza sin esperar el saludo de cifrado)
+func (in *ytInfo) warm() {
+	for _, f := range in.Formats {
+		if f.Kind == "a" {
+			if r, err := f.fetch(0, 1023); err == nil {
+				io.Copy(io.Discard, r.Body)
+				r.Body.Close()
+			}
+			return
+		}
 	}
 }
 
@@ -187,17 +204,8 @@ func fastInfo(id string, visitor string) (*ytInfo, error) {
 	if !hasV || !hasA {
 		return nil, errors.New("rápido: sin direcciones")
 	}
-	// ¿de verdad da el vídeo? (un primer trozo pequeño)
-	for _, f := range in.Formats {
-		if f.Kind == "a" {
-			r, err := f.fetch(0, 1023)
-			if err != nil {
-				return nil, errors.New("rápido: " + err.Error())
-			}
-			r.Body.Close()
-			break
-		}
-	}
+	// (antes se pedía aquí un trozo del sonido para comprobarlo: un viaje más antes de empezar;
+	//  si la dirección no vale, la caché lo nota y pasa a yt-dlp)
 	return in, nil
 }
 

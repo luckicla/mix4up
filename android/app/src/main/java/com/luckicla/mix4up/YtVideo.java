@@ -130,8 +130,16 @@ final class YtVideo {
             Info in = null;
             // primero el camino rápido (como el PC): sin yt-dlp, al momento
             if (!fresh && System.currentTimeMillis() > fastOffTil) {
-                try { in = fast(id); fastFails = 0; }
-                catch (Exception e) { Diag.log("yt " + id + ": rápido no: " + e.getMessage()); if (++fastFails >= 3) { fastOffTil = System.currentTimeMillis() + 30 * 60_000L; fastFails = 0; } }
+                long t0 = System.currentTimeMillis();
+                try { in = fast(id); fastFails = 0; Diag.log("yt " + id + ": rápido en " + (System.currentTimeMillis() - t0) + " ms"); }
+                catch (Exception e) {
+                    String m = String.valueOf(e.getMessage());
+                    Diag.log("yt " + id + ": rápido no (" + (System.currentTimeMillis() - t0) + " ms): " + m);
+                    // (un vídeo con edad, privado, de miembros… no apaga el camino rápido para los demás;
+                    //  si YouTube lo rechaza en general, se descansa 5 minutos, no media hora)
+                    boolean onlyThis = m.contains("UNPLAYABLE") || m.contains("ERROR ") || (m.contains("LOGIN_REQUIRED") && !m.toLowerCase().contains("bot"));
+                    if (!onlyThis && ++fastFails >= 3) { fastOffTil = System.currentTimeMillis() + 5 * 60_000L; fastFails = 0; }
+                }
             }
             if (in != null) { synchronized (cache) { if (cache.size() > 100) cache.clear(); cache.put(id, in); } return in; }
             try { in = resolve(id); }
@@ -258,7 +266,7 @@ final class YtVideo {
     private static Info fast(String id) throws Exception {
         JSONObject client = new JSONObject().put("clientName", "ANDROID_VR").put("clientVersion", VR_VER).put("deviceMake", "Oculus").put("deviceModel", "Quest 3")
                 .put("androidSdkVersion", 32).put("userAgent", VR_UA).put("osName", "Android").put("osVersion", "12L").put("hl", "es").put("gl", "ES");
-        String visitor = YtAccount.cfg(false).optString("visitorData");
+        String visitor = YtAccount.visitorNow();
         if (!visitor.isEmpty()) client.put("visitorData", visitor);
         JSONObject body = new JSONObject().put("context", new JSONObject().put("client", client)).put("videoId", id).put("contentCheckOk", true).put("racyCheckOk", true);
         HttpURLConnection h = (HttpURLConnection) new URL("https://www.youtube.com/youtubei/v1/player?prettyPrint=false").openConnection();
@@ -325,8 +333,8 @@ final class YtVideo {
         }
         p.put("subs", subs);
         in.pub = p;
-        // ¿de verdad lo da? (un trozo pequeño del sonido)
-        for (Format f : in.formats) if (f.kind.equals("a")) { HttpURLConnection c = fetch(f, 0, 1023); c.disconnect(); break; }
+        // (antes aquí se pedía un trozo del sonido para comprobarlo: era un viaje más a YouTube
+        //  antes de empezar; si la dirección no vale, la caché lo nota y pasa a yt-dlp)
         return in;
     }
 
@@ -337,6 +345,7 @@ final class YtVideo {
         int i = cr.lastIndexOf('/');
         try { return i >= 0 ? Long.parseLong(cr.substring(i + 1).trim()) : 0; } catch (NumberFormatException e) { return 0; }
     }
+    static final class Refused extends IOException { Refused(String m) { super(m); } }
     static HttpURLConnection fetch(Format f, long from, long to) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(f.url).openConnection();
         c.setConnectTimeout(15000); c.setReadTimeout(20000);
@@ -344,7 +353,7 @@ final class YtVideo {
         c.setRequestProperty("Accept-Encoding", "identity");
         c.setRequestProperty("Range", "bytes=" + from + "-" + to);
         int code = c.getResponseCode();
-        if (code != 206 && code != 200) { c.disconnect(); throw new IOException("youtube: " + code); }
+        if (code != 206 && code != 200) { c.disconnect(); throw new Refused("youtube: " + code); }
         return c;
     }
 
@@ -356,7 +365,7 @@ final class YtVideo {
     private static final ExecutorService POOL = Executors.newCachedThreadPool();
 
     static final class CacheFile {
-        String key, id, fid, mime; File path; long size; RandomAccessFile raf; boolean[] have, busy; int left, prio, workers; long used; String err; Format fmt;
+        String key, id, fid, mime; File path; long size; RandomAccessFile raf; boolean[] have, busy; long[] got; int left, prio, workers; long used; String err; Format fmt;
         synchronized void touch() { used = System.currentTimeMillis(); }
     }
 
@@ -374,7 +383,8 @@ final class YtVideo {
         Format f = in.format(fid);
         if (f == null) throw new IOException("esa calidad ya no está");
         long size = f.size;
-        try { HttpURLConnection h = fetch(f, 0, 0); long n = total(h.getHeaderField("Content-Range")); h.disconnect(); if (n > 0) size = n; }
+        // (si YouTube ya dijo cuánto ocupa, no hace falta preguntarlo: un viaje menos antes de empezar)
+        if (size <= 0) try { HttpURLConnection h = fetch(f, 0, 0); long n = total(h.getHeaderField("Content-Range")); h.disconnect(); if (n > 0) size = n; }
         catch (IOException e) {
             dropClient(in);
             in = info(id, true);
@@ -390,7 +400,7 @@ final class YtVideo {
         c.raf = new RandomAccessFile(c.path, "rw");
         c.raf.setLength(0);
         int n = (int) ((size + CHUNK - 1) / CHUNK);
-        c.have = new boolean[n]; c.busy = new boolean[n]; c.left = n; c.used = System.currentTimeMillis();
+        c.have = new boolean[n]; c.busy = new boolean[n]; c.got = new long[n]; c.left = n; c.used = System.currentTimeMillis();
         synchronized (files) {
             CacheFile old = files.get(key);
             if (old != null) { try { c.raf.close(); } catch (IOException ignored) {} c.path.delete(); old.touch(); return old; }
@@ -455,20 +465,26 @@ final class YtVideo {
         for (int t = 0; t < 3; t++) {
             if (t > 0) try { Thread.sleep(400L * t); } catch (InterruptedException ignored) {}
             HttpURLConnection h = null;
+            boolean reuse = false;
             try {
                 h = fetch(f, from, to);
                 InputStream in = h.getInputStream();
-                long pos = from;
+                long pos = from, base = (long) i * CHUNK;
                 for (int n; pos <= to && (n = in.read(buf)) > 0; ) {
                     int m = (int) Math.min(n, to + 1 - pos);
                     synchronized (c.raf) { c.raf.seek(pos); c.raf.write(buf, 0, m); }
                     pos += m;
+                    // lo que va llegando ya se puede mandar al vídeo (no hace falta esperar al trozo entero)
+                    synchronized (c) { if (pos - base > c.got[i]) { c.got[i] = pos - base; c.notifyAll(); } }
                 }
-                if (pos > to) return true;
+                if (pos > to) { in.close(); reuse = true; return true; }
                 from = pos;
+            } catch (Refused e) {
+                Log.w(TAG, "trozo " + i + ": " + e.getMessage());
+                return false;
             } catch (IOException e) {
                 Log.w(TAG, "trozo " + i + ": " + e.getMessage());
-            } finally { if (h != null) h.disconnect(); }
+            } finally { if (h != null && !reuse) h.disconnect(); }
         }
         return false;
     }
@@ -492,18 +508,20 @@ final class YtVideo {
         }
     }
 
-    private static boolean waitChunk(CacheFile c, int i) {
+    /** hasta dónde (sin incluir) se puede leer ya, empezando en pos; -1 si no llega */
+    private static long waitBytes(CacheFile c, long pos) {
+        int i = (int) (pos / CHUNK);
+        long base = (long) i * CHUNK, ce = Math.min(c.size, base + CHUNK);
         long deadline = System.currentTimeMillis() + 60_000;
         synchronized (c) {
-            while (!c.have[i]) {
-                if (c.err != null || System.currentTimeMillis() > deadline) return false;
+            while (!c.have[i] && base + c.got[i] <= pos) {
+                if (c.err != null || System.currentTimeMillis() > deadline) return -1;
                 if (c.workers == 0) start(c);
-                try { c.wait(1000); } catch (InterruptedException e) { return false; }
+                try { c.wait(1000); } catch (InterruptedException e) { return -1; }
             }
+            return c.have[i] ? ce : base + c.got[i];
         }
-        return true;
     }
-
     /** /ytstream/<id>/<formato> */
     static void stream(Http.Request r, OutputStream out, String id, String fid) throws IOException {
         CacheFile c;
@@ -525,19 +543,21 @@ final class YtVideo {
         }
         synchronized (c) { c.prio = (int) (start / CHUNK); c.used = System.currentTimeMillis(); }
         start(c);
-        if (!waitChunk(c, (int) (start / CHUNK))) { Http.text(out, 502, "YouTube no dio el vídeo"); return; }
+        // en cuanto llegan los primeros bytes (antes: el trozo entero de 2 MB)
+        if (waitBytes(c, start) < 0) { Http.text(out, 502, "YouTube no dio el vídeo"); return; }
         long len = end - start + 1;
         String h = (partial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n") + "Content-Type: " + c.mime + "\r\nAccept-Ranges: bytes\r\nContent-Length: " + len + "\r\n"
                 + (partial ? "Content-Range: bytes " + start + "-" + end + "/" + c.size + "\r\n" : "") + "Cache-Control: no-store\r\nConnection: close\r\n\r\n";
         out.write(h.getBytes(StandardCharsets.UTF_8));
+        out.flush();
         if (r.method.equals("HEAD")) return;
         byte[] buf = new byte[128 * 1024];
         long pos = start;
         try (RandomAccessFile rd = new RandomAccessFile(c.path, "r")) {
             while (pos <= end) {
-                int i = (int) (pos / CHUNK);
-                if (!waitChunk(c, i)) return;
-                long ce = Math.min(end, (i + 1) * CHUNK - 1);
+                long avail = waitBytes(c, pos);
+                if (avail < 0) return;
+                long ce = Math.min(end, avail - 1);
                 while (pos <= ce) {
                     int n = (int) Math.min(buf.length, ce - pos + 1);
                     rd.seek(pos);
@@ -546,6 +566,7 @@ final class YtVideo {
                     out.write(buf, 0, m);
                     pos += m;
                 }
+                out.flush();
                 c.touch();
             }
         }
@@ -569,13 +590,22 @@ final class YtVideo {
         if (!id.matches("[A-Za-z0-9_-]{11}")) { Http.text(out, 400, "bad id"); return; }
         if (!r.param("prep").isEmpty()) {
             Http.noContent(out);
-            PREP.execute(() -> { try { info(id, false); } catch (IOException ignored) {} });
+            PREP.execute(() -> {
+                try {
+                    Info in = info(id, false);
+                    // y la conexión con el servidor del vídeo, ya abierta (al tocar, empieza sin esperar el saludo de cifrado)
+                    for (Format f : in.formats) if ("a".equals(f.kind)) { warm(f); break; }
+                } catch (IOException ignored) {}
+            });
             return;
         }
         try { Http.json(out, info(id, !r.param("fresh").isEmpty()).pub); }
         catch (IOException e) { Http.text(out, 502, String.valueOf(e.getMessage())); }
     }
     private static final ExecutorService PREP = Executors.newFixedThreadPool(2);
+    private static void warm(Format f) {
+        try { HttpURLConnection c = fetch(f, 0, 1023); Http.readAll(c.getInputStream()); } catch (IOException ignored) {}
+    }
 
     static void sub(Http.Request r, OutputStream out) throws IOException {
         try {

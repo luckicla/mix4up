@@ -55,7 +55,10 @@ func newYT(s *server) *ytAccount {
 	a := &ytAccount{s: s}
 	a.load()
 	ytVisitor = func() string {
-		a.cfgMu.Lock()
+		// (sin esperar si justo se está bajando la página de YouTube: el vídeo no espera por esto)
+		if !a.cfgMu.TryLock() {
+			return ""
+		}
 		defer a.cfgMu.Unlock()
 		if a.cfgVal != nil {
 			v, _ := a.cfgVal["visitorData"].(string)
