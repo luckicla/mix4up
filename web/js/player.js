@@ -91,6 +91,7 @@ const Player = (() => {
     goingBack = false;
     stopAll();
     item = { ...it };
+    stuckAt = 0; stuckT = -1; stuckStep = 0;
     info = null; split = false; twin = false; pendingStart = 0; compat = false; cacheP = 0; offset = 0; tries = 0; histDone = false; ytMarked = false; startedAt = 0;
     ab = { a: null, b: null }; updateAB();
     clearErr(); hideResume(); hideNextUp();
@@ -358,7 +359,31 @@ const Player = (() => {
   }
   video.addEventListener('loadeddata', () => { if (!split) el.classList.add('started'); });
 
+  // vigilante: si un vídeo de YouTube se queda cargando sin avanzar, no se espera para siempre:
+  // primero se vuelve a pedir, luego en la calidad de imagen y sonido juntos (360p) y si no, un aviso con «Reintentar»
+  const diag = m => { try { if (ANDROID) A.diag(m); } catch {} };
+  let stuckAt = 0, stuckT = -1, stuckStep = 0;
+  setInterval(() => {
+    if (!item || item.src !== 'yt' || !info || !qual || !want || document.hidden || !el.classList.contains('waiting') || el.querySelector('.perr')) { stuckAt = 0; return; }
+    const t = now();
+    if (t !== stuckT) { stuckT = t; stuckAt = Date.now(); return; }
+    if (!stuckAt) { stuckAt = Date.now(); return; }
+    const secs = (Date.now() - stuckAt) / 1000;
+    const limit = el.classList.contains('started') ? 20 : 12;
+    if (secs < limit) return;
+    stuckAt = Date.now();
+    stuckStep++;
+    diag(`atascado ${item.id} en ${t.toFixed(1)}s (paso ${stuckStep}, ${qual.v.id}${qual.a ? '+' + qual.a.id : ''}, listo ${video.readyState}/${audio.readyState})`);
+    if (stuckStep === 1) { audio.removeAttribute('src'); applyQuality(t, false); return; }
+    if (stuckStep === 2 && qual.a) {
+      const mux = info.formats.filter(f => f.kind === 'av' && codecOK(f)).sort((x, y) => (y.h || 0) - (x.h || 0))[0];
+      if (mux) { qual = { v: mux, a: null, h: mux.h }; applyQuality(t, false); toast('YouTube va lento: lo pongo en ' + mux.h + 'p'); return; }
+    }
+    showErr('YouTube no está mandando este vídeo. Prueba a reintentar.');
+  }, 2000);
+
   function onError(m) {
+    diag('error del vídeo ' + (item && item.id) + ': ' + (m.error ? m.error.code + ' ' + (m.error.message || '') : '?'));
     if (!item || !m.getAttribute('src')) return;
     if (twin && m === audio) { console.warn('segundo plano: el sonido solo no pudo seguir'); return; }
     // un aviso sin error de verdad (p. ej. la imagen de espera del móvil): no es un fallo del vídeo

@@ -204,8 +204,19 @@ func fastInfo(id string, visitor string) (*ytInfo, error) {
 	if !hasV || !hasA {
 		return nil, errors.New("rápido: sin direcciones")
 	}
-	// (antes se pedía aquí un trozo del sonido para comprobarlo: un viaje más antes de empezar;
-	//  si la dirección no vale, la caché lo nota y pasa a yt-dlp)
+	// ¿de verdad da el vídeo? (un trozo pequeño del sonido; si YouTube da direcciones que luego
+	// rechaza, mejor pasar a yt-dlp ahora que con el vídeo a medias)
+	for _, f := range in.Formats {
+		if f.Kind == "a" {
+			r, err := f.fetch(0, 1023)
+			if err != nil {
+				return nil, errors.New("rápido: comprobación: " + err.Error())
+			}
+			io.Copy(io.Discard, r.Body)
+			r.Body.Close()
+			break
+		}
+	}
 	return in, nil
 }
 

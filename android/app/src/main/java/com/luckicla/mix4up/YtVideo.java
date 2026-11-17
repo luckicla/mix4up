@@ -333,8 +333,9 @@ final class YtVideo {
         }
         p.put("subs", subs);
         in.pub = p;
-        // (antes aquí se pedía un trozo del sonido para comprobarlo: era un viaje más a YouTube
-        //  antes de empezar; si la dirección no vale, la caché lo nota y pasa a yt-dlp)
+        // ¿de verdad lo da? (un trozo pequeño del sonido). Hace falta: si YouTube da direcciones que luego
+        // rechaza, mejor saberlo ya y pasar a yt-dlp aquí que con el vídeo a medias (se quedaba cargando sin fin)
+        for (Format f : in.formats) if (f.kind.equals("a")) { warm(f, true); break; }
         return in;
     }
 
@@ -383,8 +384,9 @@ final class YtVideo {
         Format f = in.format(fid);
         if (f == null) throw new IOException("esa calidad ya no está");
         long size = f.size;
-        // (si YouTube ya dijo cuánto ocupa, no hace falta preguntarlo: un viaje menos antes de empezar)
-        if (size <= 0) try { HttpURLConnection h = fetch(f, 0, 0); long n = total(h.getHeaderField("Content-Range")); h.disconnect(); if (n > 0) size = n; }
+        // (del camino rápido, el tamaño es el exacto de YouTube y ya está comprobado: un viaje menos;
+        //  el de yt-dlp a veces es aproximado y con él el vídeo no acababa de cargar)
+        if (size <= 0 || in.client != -1) try { HttpURLConnection h = fetch(f, 0, 0); long n = total(h.getHeaderField("Content-Range")); h.disconnect(); if (n > 0) size = n; }
         catch (IOException e) {
             dropClient(in);
             in = info(id, true);
@@ -453,7 +455,8 @@ final class YtVideo {
                     if (ok && !c.have[i]) { c.have[i] = true; c.left--; }
                     c.notifyAll();
                 }
-                if (!ok && !refresh(c)) { synchronized (c) { c.err = "YouTube no dio el vídeo"; c.notifyAll(); } return; }
+                if (!ok) Diag.log("yt " + c.key + ": trozo " + i + " falló, se renueva la dirección");
+                if (!ok && !refresh(c)) { Diag.log("yt " + c.key + ": no se pudo renovar"); synchronized (c) { c.err = "YouTube no dio el vídeo"; c.notifyAll(); } return; }
             }
         } finally {
             synchronized (c) { c.workers--; }
@@ -480,7 +483,7 @@ final class YtVideo {
                 if (pos > to) { in.close(); reuse = true; return true; }
                 from = pos;
             } catch (Refused e) {
-                Log.w(TAG, "trozo " + i + ": " + e.getMessage());
+                Diag.log("yt " + c.key + " trozo " + i + ": " + e.getMessage());
                 return false;
             } catch (IOException e) {
                 Log.w(TAG, "trozo " + i + ": " + e.getMessage());
@@ -525,7 +528,7 @@ final class YtVideo {
     /** /ytstream/<id>/<formato> */
     static void stream(Http.Request r, OutputStream out, String id, String fid) throws IOException {
         CacheFile c;
-        try { c = cacheFor(id, fid); } catch (IOException e) { Http.text(out, 502, String.valueOf(e.getMessage())); return; }
+        try { c = cacheFor(id, fid); } catch (IOException e) { Diag.log("yt " + id + "/" + fid + ": " + e.getMessage()); Http.text(out, 502, String.valueOf(e.getMessage())); return; }
         long start = 0, end = c.size - 1;
         boolean partial = false;
         String range = r.headers.get("range");
@@ -544,7 +547,9 @@ final class YtVideo {
         synchronized (c) { c.prio = (int) (start / CHUNK); c.used = System.currentTimeMillis(); }
         start(c);
         // en cuanto llegan los primeros bytes (antes: el trozo entero de 2 MB)
-        if (waitBytes(c, start) < 0) { Http.text(out, 502, "YouTube no dio el vídeo"); return; }
+        long t0 = System.currentTimeMillis();
+        if (waitBytes(c, start) < 0) { Diag.log("yt " + c.key + ": sin datos en " + (System.currentTimeMillis() - t0) + " ms (" + c.err + ")"); Http.text(out, 502, "YouTube no dio el vídeo"); return; }
+        if (start == 0) Diag.log("yt " + c.key + ": primeros datos en " + (System.currentTimeMillis() - t0) + " ms");
         long len = end - start + 1;
         String h = (partial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n") + "Content-Type: " + c.mime + "\r\nAccept-Ranges: bytes\r\nContent-Length: " + len + "\r\n"
                 + (partial ? "Content-Range: bytes " + start + "-" + end + "/" + c.size + "\r\n" : "") + "Cache-Control: no-store\r\nConnection: close\r\n\r\n";
@@ -603,8 +608,10 @@ final class YtVideo {
         catch (IOException e) { Http.text(out, 502, String.valueOf(e.getMessage())); }
     }
     private static final ExecutorService PREP = Executors.newFixedThreadPool(2);
-    private static void warm(Format f) {
-        try { HttpURLConnection c = fetch(f, 0, 1023); Http.readAll(c.getInputStream()); } catch (IOException ignored) {}
+    private static void warm(Format f) { try { warm(f, false); } catch (IOException ignored) {} }
+    private static void warm(Format f, boolean strict) throws IOException {
+        try { HttpURLConnection c = fetch(f, 0, 1023); Http.readAll(c.getInputStream()); }
+        catch (IOException e) { if (strict) throw new IOException("comprobación: " + e.getMessage()); }
     }
 
     static void sub(Http.Request r, OutputStream out) throws IOException {
