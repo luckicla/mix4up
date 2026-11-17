@@ -979,7 +979,7 @@ const Player = (() => {
   }
   function nativeNow() {
     if (!ANDROID || !item) return;
-    try { A.nowPlaying(JSON.stringify({ title: item.title || '', channel: item.channel || '', thumb: item.thumb || '', playing: want && !master().paused, pos: now(), dur: total(), bg: !!Settings.get().bgPlay })); } catch {}
+    try { A.nowPlaying(JSON.stringify({ title: item.title || '', channel: item.channel || '', thumb: item.thumb || '', playing: want && (!master().paused || holding), pos: now(), dur: total(), bg: !!Settings.get().bgPlay })); } catch {}
   }
   // lo que manda la notificación del móvil (o un auricular)
   function remote(cmd) {
