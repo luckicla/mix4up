@@ -91,7 +91,7 @@ const Player = (() => {
     goingBack = false;
     stopAll();
     item = { ...it };
-    stuckAt = 0; stuckT = -1; stuckStep = 0;
+    stuckAt = 0; stuckT = -1; stuckStep = 0; lastErrAt = 0; clearTimeout(upT);
     info = null; split = false; twin = false; pendingStart = 0; compat = false; cacheP = 0; offset = 0; tries = 0; histDone = false; ytMarked = false; startedAt = 0;
     ab = { a: null, b: null }; updateAB();
     clearErr(); hideResume(); hideNextUp();
@@ -362,26 +362,42 @@ const Player = (() => {
   // vigilante: si un vídeo de YouTube se queda cargando sin avanzar, no se espera para siempre:
   // primero se vuelve a pedir, luego en la calidad de imagen y sonido juntos (360p) y si no, un aviso con «Reintentar»
   const diag = m => { try { if (ANDROID) A.diag(m); } catch {} };
-  let stuckAt = 0, stuckT = -1, stuckStep = 0;
+  let stuckAt = 0, stuckT = -1, stuckStep = 0, stuckFix = 0;
   setInterval(() => {
     // (no basta con mirar si está «cargando»: con imagen y sonido por separado, el sonido puede quedarse esperando a la imagen sin aviso)
     if (!item || item.src !== 'yt' || !info || !qual || !want || master().ended || document.hidden || el.querySelector('.perr')) { stuckAt = 0; return; }
     const t = now();
-    if (t !== stuckT) { stuckT = t; stuckAt = Date.now(); return; }
+    if (t !== stuckT) { stuckT = t; stuckAt = Date.now(); if (stuckStep && Date.now() - stuckFix > 45000) stuckStep = 0; return; }
     if (!stuckAt) { stuckAt = Date.now(); return; }
     const secs = (Date.now() - stuckAt) / 1000;
     const limit = el.classList.contains('started') ? 20 : 12;
     if (secs < limit) return;
-    stuckAt = Date.now();
+    stuckAt = Date.now(); stuckFix = Date.now();
     stuckStep++;
     diag(`atascado ${item.id} en ${t.toFixed(1)}s (paso ${stuckStep}, ${qual.v.id}${qual.a ? '+' + qual.a.id : ''}, listo ${video.readyState}/${audio.readyState})`);
     if (stuckStep === 1) { audio.removeAttribute('src'); applyQuality(t, false); return; }
     if (stuckStep === 2 && qual.a) {
       const mux = info.formats.filter(f => f.kind === 'av' && codecOK(f)).sort((x, y) => (y.h || 0) - (x.h || 0))[0];
-      if (mux) { qual = { v: mux, a: null, h: mux.h }; applyQuality(t, false); toast('YouTube va lento: lo pongo en ' + mux.h + 'p'); return; }
+      if (mux) { toMux(mux, t, 'YouTube va lento: lo pongo en ' + mux.h + 'p un momento'); return; }
     }
     showErr('YouTube no está mandando este vídeo. Prueba a reintentar.');
   }, 2000);
+
+  // bajar a 360p (imagen y sonido juntos) un rato; al minuto, si el vídeo sigue, se vuelve a la calidad de antes
+  let lastErrAt = 0, upT = 0;
+  function toMux(mux, t, msg) {
+    const before = qual, id = item && item.id;
+    qual = { v: mux, a: null, h: mux.h };
+    applyQuality(t, false);
+    toast(msg);
+    clearTimeout(upT);
+    upT = setTimeout(() => {
+      if (!item || item.id !== id || !info || qual.v !== mux || !want || document.hidden) return;
+      qual = before; tries = 0; stuckStep = 0;
+      audio.removeAttribute('src');
+      applyQuality(now(), false);
+    }, 60000);
+  }
 
   function onError(m) {
     if (!item || !m.getAttribute('src')) return;
@@ -399,9 +415,14 @@ const Player = (() => {
     if (item.src === 'yt' && info) {
       tries++;
       const t = now();
-      if (tries === 1 && split && !twin) { // con imagen y sonido juntos (360p)
+      // un fallo suelto (un corte de la conexión…) no baja la calidad para el resto del vídeo:
+      // primero se vuelve a pedir igual; solo si vuelve a fallar enseguida, 360p un rato (y luego se vuelve a subir)
+      const recent = Date.now() - lastErrAt < 30000;
+      lastErrAt = Date.now();
+      if (!recent && split && !twin) { tries = Math.min(tries, 1); audio.removeAttribute('src'); applyQuality(t); return; }
+      if (tries <= 2 && split && !twin) { // con imagen y sonido juntos (360p)
         const mux = info.formats.filter(f => f.kind === 'av' && codecOK(f)).sort((x, y) => (y.h || 0) - (x.h || 0))[0];
-        if (mux) { qual = { v: mux, a: null, h: mux.h }; applyQuality(t); return; }
+        if (mux) { toMux(mux, t, 'Se cortaba: lo pongo en ' + mux.h + 'p un momento'); return; }
       }
       if (tries <= 2) { const seq = loadSeq; loadYT(t, seq).catch(e => showErr(e.message)); return; }
       showErr('YouTube no deja ver este vídeo ahora mismo.' + (m.error && m.error.message ? ' (' + m.error.message.slice(0, 120) + ')' : ''));
