@@ -177,7 +177,15 @@ const App = (() => {
   Player.audio.addEventListener('play', paintMini); Player.audio.addEventListener('pause', paintMini);
 
   // deslizar el vídeo hacia abajo: se hace pequeño (y sigue sonando)
-  M4.on('player:minimize', () => { if (history.length > 1) history.back(); else go('/'); });
+  // (vuelve a la última página que no era un vídeo, nunca al vídeo anterior)
+  let lastPage = '/';
+  const seen = [];
+  M4.on('route', r => { seen.push(r.raw); if (seen.length > 50) seen.shift(); if (r.path !== '/watch') lastPage = r.raw; });
+  M4.on('player:minimize', () => {
+    const before = seen[seen.length - 2];
+    if (before && before === lastPage && history.length > 1) history.back();
+    else go(lastPage || '/');
+  });
 
   // en el móvil, como YouTube: la barra de arriba se esconde al bajar y vuelve al subir
   let lastY = 0;
