@@ -390,6 +390,12 @@ const YT = (() => {
     const plInfo = res && res.playlist && res.playlist.playlist;
     const likeStatus = find(r, 'likeStatus');
     const subscribed = find(sec, 'subscribed');
+    // los comentarios: la sección que los trae (con el número, si lo da)
+    const cSec = findAll(r.contents || {}, 'itemSectionRenderer').find(s => s && /comment/i.test(s.sectionIdentifier || ''));
+    const cTok = cSec ? find(cSec, 'continuationCommand') : null;
+    const cPanel = (r.engagementPanels || []).map(p => p.engagementPanelSectionListRenderer).find(p => p && /comments/i.test(p.panelIdentifier || p.targetId || ''));
+    const cCount = cPanel ? text(find(cPanel.header || {}, 'contextualInfo')) : '';
+    const cOff = !cTok && !!cSec && /desactivad|turned off|disabled/i.test(JSON.stringify(cSec).slice(0, 4000));
     return {
       id, title: text(prim.title), views: text(find(prim, 'viewCount') && find(prim, 'viewCount').videoViewCountRenderer ? find(prim, 'viewCount').videoViewCountRenderer.viewCount : find(prim, 'viewCount')),
       date: text(prim.relativeDateText) || text(prim.dateText),
@@ -398,8 +404,56 @@ const YT = (() => {
       desc: (sec.attributedDescription && sec.attributedDescription.content) || text(sec.description),
       liked: likeStatus === 'LIKE', subscribed: subscribed === true,
       related: clean(rel.items, new Set([ 'video:' + id ])), relCont: rel.cont,
+      commentsToken: cTok && cTok.token || '', commentCount: cCount, commentsOff: cOff,
       playlist: plInfo ? { id: plInfo.playlistId, title: text(plInfo.title), items: clean(pl.items.filter(x => x.type === 'video'), new Set()) } : null,
     };
+  }
+  /* ---------- comentarios (y respuestas): una tanda y lo que da para la siguiente ---------- */
+  async function comments(token) {
+    const r = await call('next', { continuation: token });
+    // los datos de cada comentario vienen aparte, por su clave (la forma nueva de YouTube)
+    const ents = new Map();
+    for (const m of findAll(r.frameworkUpdates || {}, 'mutations').flat()) if (m && m.entityKey && m.payload) ents.set(m.entityKey, m.payload);
+    const acts = [...(r.onResponseReceivedEndpoints || []), ...(r.onResponseReceivedActions || [])]
+      .map(e => e.reloadContinuationItemsCommand || e.appendContinuationItemsAction).filter(Boolean);
+    const out = [];
+    let cont = '';
+    for (const it of acts.flatMap(a => a.continuationItems || [])) {
+      if (it.continuationItemRenderer) {
+        const c = find(it.continuationItemRenderer, 'continuationCommand');
+        if (c && c.token) cont = c.token;
+        continue;
+      }
+      const th = it.commentThreadRenderer;
+      const vm = th ? th.commentViewModel && th.commentViewModel.commentViewModel : it.commentViewModel;
+      const old = th ? th.comment && th.comment.commentRenderer : it.commentRenderer;
+      let c = null;
+      if (vm) {
+        const p = (ents.get(vm.commentKey) || {}).commentEntityPayload;
+        if (!p) continue;
+        const pr = p.properties || {}, au = p.author || {}, tb = p.toolbar || {};
+        const tbState = (ents.get(vm.toolbarStateKey) || {}).engagementToolbarStateEntityPayload || {};
+        c = { id: pr.commentId, text: (pr.content && pr.content.content) || '', time: pr.publishedTime || '', author: au.displayName || '',
+          chId: au.channelId || '', ava: au.avatarThumbnailUrl || '', byOwner: !!au.isCreator, likes: tb.likeCountNotliked || tb.likeCountLiked || '',
+          replies: tb.replyCount ? tb.replyCount + (+tb.replyCount === 1 ? ' respuesta' : ' respuestas') : '',
+          hearted: tbState.heartState === 'TOOLBAR_HEART_STATE_HEARTED', pinned: vm.pinnedText ? text(vm.pinnedText) : '' };
+      } else if (old) {
+        c = { id: old.commentId, text: text(old.contentText), time: text(old.publishedTimeText), author: text(old.authorText),
+          chId: old.authorEndpoint && old.authorEndpoint.browseEndpoint ? old.authorEndpoint.browseEndpoint.browseId : '',
+          ava: bestThumb(old.authorThumbnail && old.authorThumbnail.thumbnails), byOwner: !!old.authorIsChannelOwner, likes: text(old.voteCount),
+          replies: old.replyCount ? old.replyCount + (+old.replyCount === 1 ? ' respuesta' : ' respuestas') : '', hearted: !!find(old, 'creatorHeart', 200),
+          pinned: old.pinnedCommentBadge ? 'Fijado' : '' };
+      }
+      if (!c) continue;
+      if (c.ava.startsWith('//')) c.ava = 'https:' + c.ava;
+      // las respuestas: lo que hay que pedir para verlas
+      const rep = th && th.replies && th.replies.commentRepliesRenderer;
+      const rt = rep ? find(rep, 'continuationCommand') : null;
+      c.repliesToken = rt && rt.token || '';
+      if (c.repliesToken && !c.replies) c.replies = text(rep.viewReplies && find(rep.viewReplies, 'text')) || 'Respuestas';
+      out.push(c);
+    }
+    return { items: out, cont };
   }
   async function moreRelated(cont) {
     const r = await call('next', { continuation: cont });
@@ -488,7 +542,7 @@ const YT = (() => {
   const meCached = () => { const c = M4.store.get('me'); return c && c.photo ? c : null; };
   const forgetMe = () => M4.store.set('me', null);
 
-  return { getCfg, account, warm, me, meCached, forgetMe, chipFeed, connected, call, collect, clean, isShort, home, subscriptions, guideSubs, search, suggest, watch, moreRelated,
+  return { getCfg, account, warm, me, meCached, forgetMe, chipFeed, connected, call, collect, clean, isShort, home, subscriptions, guideSubs, search, suggest, watch, moreRelated, comments,
     channel, channelTab, channelVideos, playlist, history, myPlaylists, like, subscribe, watchLater, dlpFeed, text, find, findAll,
     shortsRemoved: () => shortsRemoved, ytId };
 })();

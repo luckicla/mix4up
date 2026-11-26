@@ -305,7 +305,7 @@ const M4 = (() => {
     return { path, q: new URLSearchParams(qs || ''), raw };
   }
   let renderSeq = 0, lastPath = '', enterT = 0;
-  const tabIndex = p => p === '/' ? 0 : p === '/subs' ? 1 : p === '/local' ? 2 : /^\/(library|history|later|likes|lists|downloads)$/.test(p) ? 3 : -1;
+  const tabIndex = p => p === '/' ? 0 : p === '/subs' ? 1 : p === '/local' ? 2 : /^\/(library|history|cola|later|likes|lists|downloads)$/.test(p) ? 3 : -1;
   async function render() {
     const r = parseHash();
     const seq = ++renderSeq;
@@ -322,7 +322,7 @@ const M4 = (() => {
           clearTimeout(enterT); enterT = setTimeout(() => v.classList.remove('enter'), 450);
         }
         emit('route', r);
-        try { await fn({ ...r, m, alive: () => seq === renderSeq }); }
+        try { await fn({ ...r, m, alive: () => seq === renderSeq }); if (seq === renderSeq) emit('rendered', r); }
         catch (e) { console.error(e); if (seq === renderSeq) failView(e, render); }
         return;
       }

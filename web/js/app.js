@@ -59,7 +59,7 @@ const App = (() => {
     toggleSide(false);
     M4.closePop();
     const sec = r.path === '/' ? 'home' : r.path.slice(1).split('/')[0];
-    $$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === sec || (sec === 'history' || sec === 'later' || sec === 'likes' || sec === 'lists' || sec === 'downloads') && a.dataset.nav === 'library' && innerWidth <= 760));
+    $$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === sec || (sec === 'history' || sec === 'cola' || sec === 'later' || sec === 'likes' || sec === 'lists' || sec === 'downloads') && a.dataset.nav === 'library' && innerWidth <= 760));
     if (r.path !== '/watch') {
       document.body.classList.remove('watching');
       document.title = 'Mix4Up';
