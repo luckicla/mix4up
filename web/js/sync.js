@@ -50,7 +50,7 @@ const Sync = (() => {
         const look = st.look || {};
         if ((look.lookVer || 0) > (Settings.get().lookVer || 0)) Settings.set(look);
         else if ((Settings.get().lookVer || 0) > (look.lookVer || 0)) {
-          const mine = {}; for (const k of ['theme', 'accent', 'accent2', 'radius', 'density', 'font', 'lookVer']) mine[k] = Settings.get()[k];
+          const mine = {}; for (const k of ['theme', 'accent', 'accent2', 'radius', 'font', 'lookVer']) mine[k] = Settings.get()[k];
           await lan('/lan/state', { method: 'PUT', body: JSON.stringify({ look: mine }), headers: { 'Content-Type': 'application/json' } });
         }
       }
@@ -190,7 +190,7 @@ const Sync = (() => {
         announce(since);
         const s = await api('/api/settings');
         if (Settings.get().syncLook && (s.lookVer || 0) > (Settings.get().lookVer || 0)) {
-          const look = {}; for (const k of ['theme', 'accent', 'accent2', 'radius', 'density', 'font', 'lookVer']) if (k in s) look[k] = s[k];
+          const look = {}; for (const k of ['theme', 'accent', 'accent2', 'radius', 'font', 'lookVer']) if (k in s) look[k] = s[k];
           Settings.set(look);
         }
         M4.emit('synced');
