@@ -66,7 +66,7 @@ const Views = (() => {
       const pc = h('div.card.pl-stack', null,
         h('a.thumb', { href }, it.thumb ? h('img', { src: it.thumb, alt: '', loading: 'lazy' }) : h('div.ph', null, icon('list')), h('div.count', null, icon('list'), h('div', null, it.count || ''))),
         h('div.meta', null, h('div.t', null, h('a', { href }, h('h3', null, it.title || 'Lista')), h('div.sub', null, it.channel || (it.local ? 'Lista de Mix4Up' : 'Lista')))));
-      pc._menu = a => M4.popMenu(a, [{ icon: 'list', label: 'Abrir la lista', fn: () => { location.hash = href; } },
+      pc._menu = a => M4.popMenu(a, [{ icon: 'list', label: 'Abrir la lista', fn: () => { location.hash = href; } }, { icon: 'newtab', label: 'Abrir en una pestaña nueva', fn: () => Tabs.open(href, it.title) },
         !it.local ? { icon: 'link', label: 'Copiar enlace', fn: () => M4.copy('https://www.youtube.com/playlist?list=' + it.id) } : null]);
       return pc;
     }
@@ -80,7 +80,11 @@ const Views = (() => {
       // sin miniatura todavía: un fotograma, sacado aquí mismo
       if (it.src === 'local' && it.native !== false && !it.remote) wantThumb(it, img);
     };
-    const th = h('a.thumb', { href }, img, !it.thumb ? h('div.ph', null, icon('film')) : '',
+    // encima de la portada: a tu cola (para ir viéndolos poco a poco, en orden)
+    const qOn = () => Journal.isOn('cola', key);
+    const qb = h('button.qbtn' + (qOn() ? '.on' : ''), { type: 'button', 'aria-label': 'Añadir a tu cola', title: qOn() ? 'Quitar de tu cola' : 'Añadir a tu cola',
+      onclick: e => { e.preventDefault(); e.stopPropagation(); toggleCola(it); } }, icon(qOn() ? 'inqueue' : 'queue'));
+    const th = h('a.thumb', { href }, img, !it.thumb ? h('div.ph', null, icon('film')) : '', it.src === 'local' && it.remote ? '' : qb,
       it.live ? h('span.dur.live', null, 'EN DIRECTO') : it.durText || it.dur ? h('span.dur', null, it.durText || dur(it.dur)) : '',
       w ? h('div.prog', { style: { width: Math.max(4, w * 100) + '%' } }) : '',
       it.src === 'local' && !it.native ? h('span.badge', null, (it._v && it._v.ext || '').toUpperCase()) : '');
@@ -168,6 +172,9 @@ const Views = (() => {
       if (Player.item && it.src === 'yt') items.push({ icon: 'next', label: 'Ver después del que suena', fn: () => { Player.queueNext && Player.queueNext(it); toast('Lo verás después de este'); } });
       items.push('-');
     }
+    items.push({ icon: 'newtab', label: 'Abrir en una pestaña nueva', fn: () => Tabs.open(watchHref(it, opts.list), it.title) });
+    items.push({ icon: Journal.isOn('cola', key) ? 'inqueue' : 'queue', label: Journal.isOn('cola', key) ? 'Quitar de tu cola' : 'Añadir a tu cola', fn: () => toggleCola(it) });
+    if (opts.cola) items.push({ icon: 'trash', label: 'Quitar de tu cola', fn: () => { Journal.add('cola', key, 'del'); M4.render(); } });
     if (it.src !== 'local' || it.key.startsWith('yt:')) {
       items.push({ icon: 'later', label: Journal.isOn('wl', key) ? 'Quitar de Ver más tarde' : 'Guardar en Ver más tarde', fn: () => toggleLater(it) });
     }
@@ -188,7 +195,7 @@ const Views = (() => {
     M4.popMenu(anchor, items);
   }
   function channelMenu(id, title, anchor) {
-    M4.popMenu(anchor, [{ icon: 'user', label: 'Ir al canal' + (title ? ' ' + title : ''), fn: () => go('/channel/' + id) },
+    M4.popMenu(anchor, [{ icon: 'user', label: 'Ir al canal' + (title ? ' ' + title : ''), fn: () => go('/channel/' + id) }, { icon: 'newtab', label: 'Abrir en una pestaña nueva', fn: () => Tabs.open('#/channel/' + id, title) },
       { icon: 'link', label: 'Copiar enlace del canal', fn: () => M4.copy('https://www.youtube.com/' + (id.startsWith('@') ? id : 'channel/' + id)) }]);
   }
   function refreshCard(key) {
@@ -201,6 +208,24 @@ const Views = (() => {
     const c = anchor.closest('.card');
     if (c) c.style.display = 'none';
     toast('Vídeo oculto', { action: 'Deshacer', fn: () => { Journal.add('hide', key, 'del'); if (c) c.style.display = ''; } });
+  }
+  /* ---------- tu cola: vídeos para ir viendo poco a poco, en el orden en que los pones ---------- */
+  const colaItems = () => Journal.all('cola').slice().reverse().map(e => fromMeta({ ...(e.v || {}), key: e.k })).filter(Boolean);
+  function toggleCola(it) {
+    const key = it.key || (it.src === 'local' ? it.key : 'yt:' + it.id);
+    const on = Journal.toggle('cola', key, Journal.meta(it));
+    M4.haptic(on ? 'confirm' : 'tap');
+    for (const b of document.querySelectorAll(`.card[data-key="${CSS.escape(key)}"] .qbtn`)) {
+      b.classList.toggle('on', on); b.title = on ? 'Quitar de tu cola' : 'Añadir a tu cola';
+      b.replaceChildren(icon(on ? 'inqueue' : 'queue'));
+    }
+    const n = Journal.all('cola').length;
+    // si estás viendo algo, también va a lo siguiente que se pone
+    if (on && Player.item && Player.keyOf(Player.item) !== key) {
+      const curIn = Journal.isOn('cola', Player.keyOf(Player.item)) ? 1 : 0;
+      Player.queueAt(it, n - 1 - curIn);
+    }
+    toast(on ? 'En tu cola' + (n > 1 ? ' (' + n + ' vídeos)' : '') : 'Quitado de tu cola', on ? { action: 'Ver la cola', fn: () => go('/cola') } : {});
   }
   async function toggleLater(it) {
     const key = it.key || 'yt:' + it.id;
@@ -303,6 +328,7 @@ const Views = (() => {
         const n = x => x ? h('small', null, x) : '';
         const tile = (href, ic, label, count) => h('a', { href }, h('i', null, icon(ic)), h('span', null, label), n(count));
         quick.replaceChildren(
+          tile('#/cola', 'queue', 'Tu cola', Journal.all('cola').length),
           tile('#/later', 'later', 'Ver más tarde', Journal.all('wl').length),
           tile('#/history', 'history', 'Historial', Journal.all('hist').length),
           tile('#/local', 'folder', 'Mis vídeos', (local.videos || []).length),
@@ -492,6 +518,17 @@ const Views = (() => {
     const box = metaList('Ver más tarde', Journal.all('wl'), { later: true, empty: 'Guarda vídeos con el menú ⋮ → «Guardar en Ver más tarde».' });
     if (YT.connected()) box.insertBefore(tabs(which, [['mix4up', 'En Mix4Up', '#/later'], ['youtube', 'En YouTube', '#/later?de=youtube']]), box.children[1]);
   });
+  route(/^\/cola$/, async () => {
+    await loadLocal().catch(() => {});
+    const items = colaItems();
+    const box = setView('');
+    box.append(head('Tu cola', items.length ? h('button.btn.acc', { onclick: () => go(watchHref(items[0]).slice(1)) }, icon('play'), 'Empezar') : '',
+      items.length ? h('button.btn.ghost', { onclick: async () => { if (await M4.confirm('¿Vaciar tu cola?', 'Se quitan todos los vídeos de la cola (no se borra nada más).', 'Vaciar', true)) { for (const e of Journal.all('cola')) Journal.add('cola', e.k, 'del'); M4.render(); } } }, icon('trash'), 'Vaciar') : ''));
+    if (!items.length) { box.append(h('div.notice', null, h('h2', null, 'Tu cola está vacía'), h('p', null, 'Pon vídeos con el botón que sale encima de las portadas, o con ⋮ → «Añadir a tu cola». Se ven en orden, uno detrás de otro, y cada uno se quita solo al terminarlo.'))); return; }
+    box.append(h('p.muted', { style: { margin: '0 12px 10px' } }, items.length + (items.length === 1 ? ' vídeo' : ' vídeos') + ' · se ven en orden y cada uno se quita solo al terminarlo'));
+    box.append(h('div.row-list', null, items.map(it => card(it, { cola: true, desc: false }))));
+  });
+
   route(/^\/likes$/, async ({ q }) => {
     await loadLocal().catch(() => {});
     const which = q.get('de') || 'mix4up';
@@ -550,6 +587,7 @@ const Views = (() => {
     const row = (href, ic, label, n) => h('a.yrow', { href }, icon(ic), h('span', null, label), n != null ? h('small', null, n) : '');
     box.append(h('div', { style: { marginTop: '6px' } },
       row('#/local', 'folder', 'Mis vídeos', (local.videos || []).length),
+      row('#/cola', 'queue', 'Tu cola', Journal.all('cola').length || null),
       row('#/later', 'later', 'Ver más tarde', Journal.all('wl').length || null),
       row('#/likes', 'like', 'Vídeos que me gustan', Journal.all('like').length || null),
       row('#/downloads', 'download', 'Descargas'),
@@ -670,9 +708,16 @@ const Views = (() => {
     const relEl = h('div.related', null, it.src === 'yt' ? Array.from({ length: 8 }, () => h('div.card.skel', null, h('div.thumb', { style: { width: '168px' } }), h('div', { style: { flex: 1 } }, h('div.line'), h('div.line', { style: { width: '60%' } })))) : '');
     const autoSw = h('span.switch' + (Settings.get().autoplay ? '.on' : ''), { role: 'switch', onclick: () => { Settings.set({ autoplay: !Settings.get().autoplay }); autoSw.classList.toggle('on', Settings.get().autoplay); } }, h('span', null, 'Reproducción automática'), h('i'));
     const plBox = h('div', { hidden: true, style: { background: 'var(--bg2)', borderRadius: 'var(--r)', padding: '12px', marginBottom: '12px', maxHeight: '420px', overflowY: 'auto' } });
+    // tu cola: lo que viene después, en orden (antes que la lista y los relacionados)
+    const meKey = Player.keyOf(it);
+    const colaQ = colaItems().filter(x => Player.keyOf(x) !== meKey);
+    const colaBox = h('div.colabox', { hidden: !colaQ.length },
+      h('div.colahead', null, icon('queue'), h('b', null, 'Tu cola'), h('small', null, colaQ.length + (colaQ.length === 1 ? ' vídeo' : ' vídeos')), h('a.btn.ghost.sm', { href: '#/cola' }, 'Ver')),
+      h('div.related', null, colaQ.slice(0, 12).map(x => card(x, { noAva: true, cola: true }))));
+    const commentsEl = h('section.comments', { hidden: it.src !== 'yt' });
     const v = setView('wide', h('div.watch' + (theater ? '.theater' : ''), null,
-      h('div.primary', null, host, h('div.info', null, titleEl, metaEl, h('div.vbar', null, ownerEl, actsEl), chapEl, descEl)),
-      h('div.secondary', null, plBox, h('div.upnext', null, h('h3', null, it.src === 'local' ? 'Más de tus vídeos' : 'Siguientes'), autoSw), relEl)));
+      h('div.primary', null, host, h('div.info', null, titleEl, metaEl, h('div.vbar', null, ownerEl, actsEl), chapEl, descEl, commentsEl)),
+      h('div.secondary', null, colaBox, plBox, h('div.upnext', null, h('h3', null, it.src === 'local' ? 'Más de tus vídeos' : 'Siguientes'), autoSw), relEl)));
     document.body.classList.add('watching'); M4.barsFor();
     Player.mount(host);
     $('#mini').hidden = true;
@@ -722,7 +767,7 @@ const Views = (() => {
       const others = local.videos.filter(x => x.folder === (it._v && it._v.folder) && x.id !== it.lid).map(localItem);
       const rel = (others.length ? others : local.videos.filter(x => x.id !== it.lid).map(localItem)).slice(0, 40);
       relEl.replaceChildren(...rel.map(r => card(r, { noAva: true })));
-      Player.setQueue(rel.filter(r => !Journal.watched(r.key)).slice(0, 5));
+      Player.setQueue([...colaQ, ...rel.filter(r => !Journal.watched(r.key)).slice(0, 5)]);
       return;
     }
     // YouTube: datos de la página y relacionados (sin Shorts)
@@ -773,13 +818,96 @@ const Views = (() => {
     }, { root: $('#main'), rootMargin: '400px' });
     io.observe(relMore);
     if (!queue.length) queue = w.related.filter(x => x.type === 'video' && !Journal.watched('yt:' + x.id)).slice(0, 3);
-    if (Player.item && Player.keyOf(Player.item) === key) Player.setQueue(queue.map(x => ({ ...x, _list: list || '', _mlist: mlist || '' })));
+    if (Player.item && Player.keyOf(Player.item) === key) Player.setQueue([...colaQ, ...queue.map(x => ({ ...x, _list: list || '', _mlist: mlist || '' }))]);
+    if (colaQ[0]) queue = colaQ;
+    // los comentarios
+    if (w.commentsToken) setupComments(commentsEl, w.commentsToken, w.commentCount);
+    else commentsEl.replaceChildren(h('p.muted', null, w.commentsOff ? 'Los comentarios están desactivados en este vídeo.' : ''));
     // el siguiente, preparado (empezará al momento)
     if (queue[0] && queue[0].id) setTimeout(() => prepare(queue[0].id), 4000);
   });
 
+  // al terminar uno de tu cola (o pasar al siguiente), se quita de la cola
+  const leaveCola = it => { const k = it && Player.keyOf(it); if (k && Journal.isOn('cola', k)) Journal.add('cola', k, 'del'); };
+  M4.on('player:ended', leaveCola);
+
+  /* ---------- comentarios ---------- */
+  function setupComments(box, token, count) {
+    const mob = innerWidth <= 760;
+    const headTxt = 'Comentarios' + (count ? ' · ' + count : '');
+    if (mob) {
+      // en el móvil, como YouTube: una franja que abre los comentarios en una hoja
+      box.replaceChildren(h('button.chead.tap', { onclick: () => M4.sheet(sh => { sh.classList.add('csheet'); sh.append(h('h3', null, headTxt)); const list = h('div.clist'); sh.append(list); loadComments(list, token); }) },
+        icon('comment'), h('b', null, headTxt), h('span.chev2', null, '›')));
+      return;
+    }
+    const list = h('div.clist');
+    box.replaceChildren(h('div.chead', null, icon('comment'), h('b', null, headTxt)), list);
+    // se cargan al llegar a ellos (no antes: así el vídeo empieza sin esperar)
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); loadComments(list, token); } }, { rootMargin: '600px' });
+    io.observe(box);
+  }
+  function loadComments(list, token) {
+    const sentinel = h('div.loadmore', null, h('div.spin'));
+    list.append(sentinel);
+    let cont = token, busy = false;
+    const more = async () => {
+      if (busy || !cont || !list.isConnected) return;
+      busy = true;
+      const t = cont; cont = null;
+      try {
+        const r = await YT.comments(t);
+        for (const c of r.items) list.insertBefore(commentEl(c), sentinel);
+        cont = r.cont;
+        if (!cont) sentinel.replaceChildren(list.querySelector('.cmt') ? '' : h('p.muted', null, 'Aún no hay comentarios.'));
+      } catch (e) {
+        sentinel.replaceChildren(errorBox(e, () => { sentinel.replaceChildren(h('div.spin')); cont = t; more(); }, 'No se pudieron cargar los comentarios'));
+      } finally {
+        busy = false;
+        if (cont && sentinel.isConnected) { const r = sentinel.getBoundingClientRect(); if (r.top < innerHeight + 400) setTimeout(more, 50); }
+      }
+    };
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) more(); }, { rootMargin: '500px' });
+    io.observe(sentinel);
+    more();
+  }
+  function commentEl(c, reply) {
+    const body = h('div.ctext');
+    body.append(...linkify(c.text || ''));
+    const long = (c.text || '').length > 380 || (c.text || '').split('\n').length > 6;
+    if (long) { body.classList.add('short'); body.onclick = e => { if (!e.target.closest('a')) body.classList.toggle('short'); }; }
+    const author = h('a.cauth' + (c.byOwner ? '.owner' : ''), { href: c.chId ? '#/channel/' + c.chId : null }, c.author || '');
+    const repliesBox = h('div.creplies');
+    const el = h('div.cmt' + (reply ? '.reply' : ''), null,
+      c.chId ? h('a', { href: '#/channel/' + c.chId }, c.ava ? h('img.ava', { src: c.ava, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : h('div.ava')) : (c.ava ? h('img.ava', { src: c.ava, alt: '', loading: 'lazy' }) : h('div.ava')),
+      h('div.cbody', null,
+        c.pinned ? h('div.cpin', null, c.pinned) : '',
+        h('div.cline', null, author, h('small', null, c.time || '')),
+        body,
+        h('div.cacts', null, h('span', null, icon('like'), c.likes || ''), c.hearted ? h('span.cheart', { title: 'Al creador le gusta' }, '♥') : ''),
+        c.repliesToken && !reply ? h('button.cmore', { onclick: async e => {
+          const b = e.currentTarget;
+          if (repliesBox.childElementCount) { repliesBox.hidden = !repliesBox.hidden; b.firstChild.textContent = repliesBox.hidden ? '▾ ' + c.replies : '▴ Ocultar respuestas'; return; }
+          b.disabled = true;
+          let tok = c.repliesToken;
+          try {
+            while (tok) {
+              const r = await YT.comments(tok);
+              for (const x of r.items) repliesBox.append(commentEl(x, true));
+              tok = r.cont;
+              if (repliesBox.childElementCount > 200) break;
+            }
+            b.firstChild.textContent = '▴ Ocultar respuestas';
+          } catch (err) { toast('No se pudieron cargar las respuestas: ' + err.message); }
+          b.disabled = false;
+        } }, h('span', null, '▾ ' + (c.replies || 'Respuestas'))) : '',
+        repliesBox));
+    return el;
+  }
+
   // lo siguiente: a su página
   M4.on('player:next', n => {
+    if (!n._back) leaveCola(Player.item);
     if (n.src === 'local') go('/watch?lid=' + encodeURIComponent(n.lid));
     else go('/watch?v=' + n.id + (n._list ? '&list=' + encodeURIComponent(n._list) : '') + (n._mlist ? '&mlist=' + n._mlist : ''));
   });
@@ -812,5 +940,5 @@ const Views = (() => {
     box.replaceChildren(...(list.length ? [h('h4', null, 'Suscripciones'), ...list.slice(0, 12).map(c => h('a.sub', { href: '#/channel/' + c.id }, c.thumb ? h('img', { src: c.thumb, alt: '', loading: 'lazy' }) : icon('user'), h('span', null, c.title))), h('hr')] : []));
   }
 
-  return { preloadHome, card, grid, infinite, skeleton, loadLocal, localCopy, localItem, download, itemMenu, channelMenu, sideSubs, toggleLater, saveToList, watchCtx: () => watchCtx, local: () => local };
+  return { preloadHome, card, toggleCola, colaItems, grid, infinite, skeleton, loadLocal, localCopy, localItem, download, itemMenu, channelMenu, sideSubs, toggleLater, saveToList, watchCtx: () => watchCtx, local: () => local };
 })();

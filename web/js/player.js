@@ -523,6 +523,7 @@ const Player = (() => {
 
   function ended() {
     savePos(true);
+    M4.emit('player:ended', item);
     if (sleep && sleep.end === 'video') { fireSleep(); return; }
     if (ab.a != null && ab.b == null) { seek(ab.a); return; }
     if (loopOne) { seek(0); play(); return; }
@@ -556,10 +557,12 @@ const Player = (() => {
     hideNextUp();
     const p = backStack.pop();
     goingBack = true;
-    M4.emit('player:next', p);
+    M4.emit('player:next', { ...p, _back: true });
   }
   function setQueue(list) { queue = (list || []).filter(Boolean); }
   function queueNext(it) { if (it) { queue = queue.filter(q => q.id !== it.id); queue.unshift(it); } }
+  // uno de tu cola: detrás de los otros de la cola que ya estaban en lo siguiente
+  function queueAt(it, i) { if (!it) return; const k = keyOf(it); queue = queue.filter(q => keyOf(q) !== k); queue.splice(Math.max(0, Math.min(i, queue.length)), 0, it); }
 
   function applyVolume() {
     const s = Settings.get();
@@ -1184,7 +1187,7 @@ const Player = (() => {
   function close() { savePos(true); stopAll(); item = null; info = null; el.remove(); clearErr(); setPlayIcon(); if (ANDROID) try { A.nowPlaying('{}'); } catch {} }
 
   return {
-    el, video, audio, open, close, mount, play, pause, toggle, seek, skip, next, setQueue, queueNext, toggleMenu, setSpeed, setSleep, toggleFS, pip, onPip, remote,
+    el, video, audio, open, close, mount, play, pause, toggle, seek, skip, next, setQueue, queueNext, queueAt, toggleMenu, setSpeed, setSleep, toggleFS, pip, onPip, remote,
     setBg,
     get item() { return item; }, get info() { return info; }, get playing() { return want && !!item && (!master().paused || holding); },
     get time() { return now(); }, get duration() { return total(); }, isFS, keyOf, sleepLabel, openMenu,

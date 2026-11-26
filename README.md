@@ -4,6 +4,9 @@
 
 - Tu inicio de YouTube (las mismas recomendaciones), suscripciones, historial, Ver más tarde, Me gusta y listas, conectando tu cuenta (la sesión se guarda solo en tu aparato).
 - Ni un Short: ni en inicio, búsquedas, canales, relacionados ni suscripciones.
+- Tu cola: un botón encima de cada portada para ir poniendo vídeos y verlos poco a poco, en orden.
+- Pestañas dentro de la app: clic con la rueda (o ⋮ → «Abrir en una pestaña nueva»).
+- Los comentarios de cada vídeo, con sus respuestas.
 - Reproductor propio: pantalla completa, gestos, velocidad, subtítulos, imagen dentro de imagen, calidad, A-B, temporizador para dormir, y en segundo plano.
 - En la máxima calidad que tenga el vídeo (4K, 8K…), sin esperar a nada.
 - Rápido: al abrir un vídeo se baja entero en segundo plano con varias conexiones a la vez.
