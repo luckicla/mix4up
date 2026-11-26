@@ -369,11 +369,20 @@ const App = (() => {
 
   /* ---------- la barra de arriba de la app de escritorio ---------- */
   // (la ventana no lleva la de Windows: flechas, lo que suena, minimizar/maximizar/cerrar)
+  // En el Mac los botones de la ventana son los de colores del sistema (a la izquierda): la página no pinta los suyos
   const SH = window.Mix4UpShell;
+  const MAC = !!SH && SH.platform === 'darwin';
   if (SH && typeof SH.win === 'function') {
     document.documentElement.classList.add('tb');
-    $('#wctl').hidden = false;
-    const paintWin = w => { if (!w) return; document.documentElement.classList.toggle('tb-max', !!w.max); document.documentElement.classList.toggle('tb-full', !!w.full); $('#tbMax').title = w.max ? 'Restaurar' : 'Maximizar'; };
+    document.documentElement.classList.toggle('tb-mac', MAC);
+    $('#wctl').hidden = MAC;
+    const paintWin = w => {
+      if (!w) return;
+      document.documentElement.classList.toggle('tb-max', !!w.max);
+      // en pantalla completa del Mac la barra se queda (y sin hueco para los botones, que se esconden)
+      document.documentElement.classList.toggle(MAC ? 'tb-macfull' : 'tb-full', !!w.full);
+      $('#tbMax').title = w.max ? 'Restaurar' : 'Maximizar';
+    };
     SH.win('').then(paintWin).catch(() => {});
     SH.onWin(paintWin);
     $('#tbMin').onclick = () => SH.win('min');

@@ -1,8 +1,9 @@
 # Mix4Up: con cada cambio en main se compila todo (el motor, la app de PC con
-# instalador y portable, y el APK), se PRUEBA de verdad (Linux + Chrome, un
-# Windows limpio y el emulador de Android) y solo si todo pasa se publica en
-# las releases fijas mix4up-pc-latest y mix4up-android-latest (de ahí se
-# actualizan solas las apps) y como versión oficial v1.x.y.
+# instalador y portable, la app de Mac y el APK), se PRUEBA de verdad (Linux +
+# Chrome, un Windows limpio, un Mac y el emulador de Android) y solo si todo
+# pasa se publica en las releases fijas mix4up-pc-latest, mix4up-mac-latest y
+# mix4up-android-latest (de ahí se actualizan solas las apps) y como versión
+# oficial v1.x.y. Lanzado a mano en otra rama, prueba todo pero no publica.
 # La versión sale del número de ejecución: PC y móvil llevan siempre la misma.
 name: Mix4Up (compilar, probar y publicar)
 
@@ -49,6 +50,8 @@ jobs:
           test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
           go vet ./...
           GOOS=windows go vet ./...
+          GOOS=darwin GOARCH=arm64 go vet ./...
+          GOOS=darwin GOARCH=amd64 go vet ./...
           for f in web/js/*.js desktop/*.js; do node --check "$f"; done
       - name: Herramientas para el icono del exe
         run: |
@@ -62,12 +65,17 @@ jobs:
           test -f rsrc_windows_amd64.syso
           rm rsrc_windows_amd64.syso
           go build -trimpath -ldflags "-s -w -X main.version=${{ needs.version.outputs.v }}.${{ needs.version.outputs.n }}" -o mix4up-linux .
+          for a in arm64 amd64; do
+            GOOS=darwin GOARCH=$a go build -trimpath -ldflags "-s -w -X main.version=${{ needs.version.outputs.v }}.${{ needs.version.outputs.n }}" -o mix4up-darwin-$a .
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: core
           path: |
             mix4up-core.exe
             mix4up-linux
+            mix4up-darwin-arm64
+            mix4up-darwin-amd64
 
   prueba-web:
     needs: core
@@ -138,6 +146,104 @@ jobs:
         with:
           name: desktop-vieja
           path: vieja/
+
+  # La app de Mac: el motor para Intel y Apple Silicon en uno (universal) dentro
+  # de la misma app de Electron. Sin certificado de Apple: firmada «ad hoc».
+  mac:
+    needs: [version, core]
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      V: ${{ needs.version.outputs.v }}
+      VN: ${{ needs.version.outputs.v }}.${{ needs.version.outputs.n }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: core
+          path: core
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: El motor universal (Intel + Apple Silicon)
+        run: |
+          mkdir -p desktop/bin
+          lipo -create core/mix4up-darwin-arm64 core/mix4up-darwin-amd64 -output desktop/bin/mix4up-core
+          chmod +x desktop/bin/mix4up-core
+          codesign --force --sign - desktop/bin/mix4up-core
+          lipo -info desktop/bin/mix4up-core
+      - name: Probar el motor (arranca y contesta)
+        run: |
+          mkdir -p "$RUNNER_TEMP/vids"
+          MIX4UP_VIDEOS="$RUNNER_TEMP/vids" desktop/bin/mix4up-core -token prueba -data "$RUNNER_TEMP/datos" > motor.log 2>&1 &
+          echo $! > motor.pid
+          ok=; for i in $(seq 1 60); do curl -sf http://127.0.0.1:47823/api/version >/dev/null && ok=1 && break; sleep 1; done
+          test -n "$ok" || { cat motor.log; exit 1; }
+          test "$(curl -sf http://127.0.0.1:47823/api/version)" = "$VN"
+          curl -sf http://127.0.0.1:47823/ | grep -q 'Mix'
+          curl -sf "http://127.0.0.1:47823/api/settings?k=prueba" | python3 -c 'import json,sys; json.load(sys.stdin); print("ajustes: ok")'
+          curl -sf "http://127.0.0.1:47823/api/info?k=prueba" | tee info.json; echo
+          python3 -c 'import json; d=json.load(open("info.json")); assert d["platform"] == "pc" and d["data"].endswith("datos"), d; assert d["downloads"].endswith("Mix4Up"), d'
+          # yt-dlp y deno para macOS: el motor los baja solo en ~/Library/Application Support/Mix4Up/herramientas
+          t=; for i in $(seq 1 90); do t=$(curl -sf "http://127.0.0.1:47823/api/yt/tools?k=prueba"); echo "$t" | grep -q '"ready":true' && echo "$t" | grep -q '"deno":true' && echo "$t" | grep -q '"busy":false' && break; sleep 2; done
+          echo "herramientas: $t"
+          curl -sf "http://127.0.0.1:47823/api/yt/tools?k=prueba&v=1" | tee tools.json; echo
+          python3 -c 'import json; d=json.load(open("tools.json")); assert d["ready"] and d["deno"] and d["version"], d'
+          ls -la "$HOME/Library/Application Support/Mix4Up/herramientas/yt"
+          kill "$(cat motor.pid)" || true
+          cat motor.log
+      - name: Herramientas del Mac (yt-dlp, deno y ffmpeg se bajan y arrancan)
+        env:
+          MIX4UP_PRUEBA_HERRAMIENTAS: '1'
+        run: go test -run Herramientas -v -count=1 .
+      - name: Icono (.icns)
+        run: |
+          mkdir -p icon.iconset
+          for s in 16 32 128 256 512; do
+            sips -z $s $s docs/icon-512.png --out icon.iconset/icon_${s}x${s}.png >/dev/null
+            d=$(( s * 2 )); sips -z $d $d docs/icon-512.png --out icon.iconset/icon_${s}x${s}@2x.png >/dev/null
+          done
+          iconutil -c icns icon.iconset -o desktop/build/icon.icns
+          ls -la desktop/build/icon.icns
+      - name: Compilar (dmg y zip)
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm install --no-audit --no-fund
+          npm version "$V" --no-git-tag-version --allow-same-version
+          npx electron-builder --mac dmg zip --universal --publish never
+          ls -la dist
+          APP=dist/mac-universal/Mix4Up.app
+          test -f dist/Mix4Up-Mac.dmg && test -f dist/Mix4Up-Mac.zip
+          test -x "$APP/Contents/Resources/core/mix4up-core"
+          lipo -info "$APP/Contents/MacOS/Mix4Up" "$APP/Contents/Resources/core/mix4up-core"
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$V"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          echo "$V $(shasum -a 256 dist/Mix4Up-Mac.dmg | cut -d' ' -f1) $(shasum -a 256 dist/Mix4Up-Mac.zip | cut -d' ' -f1)" > dist/mac.txt
+          cat dist/mac.txt
+          mkdir -p ../mac && cp dist/Mix4Up-Mac.dmg dist/Mix4Up-Mac.zip dist/mac.txt ../mac/
+      - name: Probar la app empaquetada (abre la ventana y arranca su motor)
+        run: |
+          APP=desktop/dist/mac-universal/Mix4Up.app
+          "$APP/Contents/MacOS/Mix4Up" > app.log 2>&1 &
+          ok=; for i in $(seq 1 90); do test "$(curl -sf http://127.0.0.1:47823/api/version)" = "$VN" && ok=1 && break; sleep 1; done
+          pgrep -fl mix4up-core || true
+          pkill -f 'Mix4Up.app/Contents/MacOS/Mix4Up' || true
+          sleep 3; pkill -f mix4up-core || true
+          if [ -z "$ok" ]; then
+            cat app.log
+            cat "$HOME/Library/Application Support/Mix4Up/escritorio/escritorio.log" 2>/dev/null || true
+            echo "la app no arrancó su motor"; exit 1
+          fi
+          echo "la app arranca y su motor contesta ($VN)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: mac/
 
   prueba-pc:
     needs: [version, desktop]
@@ -311,13 +417,19 @@ jobs:
           path: out/
 
   publicar:
-    needs: [version, core, desktop, apk, prueba-web, prueba-pc, prueba-android]
+    needs: [version, core, desktop, mac, apk, prueba-web, prueba-pc, prueba-android]
+    # solo desde main: lanzado a mano en otra rama se prueba todo pero no se publica nada
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: desktop
           path: pc
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac
+          path: mac
       - uses: actions/download-artifact@v4
         with:
           name: apk
@@ -336,6 +448,18 @@ jobs:
             pc/Mix4Up-Portable.exe
             pc/latest.yml
             pc/desktop.txt
+      - name: Mac (de aquí mira la app del Mac si hay una nueva)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mix4up-mac-latest
+          name: Mix4Up para Mac (última)
+          prerelease: true
+          make_latest: false
+          body: Última versión de Mix4Up para Mac (Intel y Apple Silicon). Descarga Mix4Up-Mac.dmg y arrastra Mix4Up a Aplicaciones. No está firmada por Apple, así que la primera vez ábrela con clic derecho → Abrir.
+          files: |
+            mac/Mix4Up-Mac.dmg
+            mac/Mix4Up-Mac.zip
+            mac/mac.txt
       - name: Android (de aquí se actualiza sola la app del móvil)
         uses: softprops/action-gh-release@v2
         with:
@@ -357,15 +481,20 @@ jobs:
           files: |
             pc/Mix4Up-Instalador.exe
             pc/Mix4Up-Portable.exe
+            mac/Mix4Up-Mac.dmg
+            mac/Mix4Up-Mac.zip
             movil/Mix4Up.apk
           body: |
             ## Mix4Up v${{ needs.version.outputs.v }}
 
-            Tus vídeos y YouTube **sin Shorts y sin anuncios**, con tus recomendaciones, para Windows y Android.
+            Tus vídeos y YouTube **sin Shorts y sin anuncios**, con tus recomendaciones, para Windows, Mac y Android.
 
             - **Windows**: `Mix4Up-Instalador.exe` (se instala y se actualiza sola) o `Mix4Up-Portable.exe` (sin instalar, los datos van junto al .exe).
+            - **Mac** (Intel y Apple Silicon): `Mix4Up-Mac.dmg` (o `Mix4Up-Mac.zip`). Avisa cuando hay una versión nueva.
             - **Android**: `Mix4Up.apk`. Se actualiza sola.
 
-            Ha pasado las pruebas automáticas en Linux, en un Windows limpio y en el emulador de Android antes de publicarse.
+            Ha pasado las pruebas automáticas en Linux, en un Windows limpio, en un Mac y en el emulador de Android antes de publicarse.
+
+            **Mac**: no está firmada por Apple. La primera vez, clic derecho en Mix4Up → *Abrir* → *Abrir* (en macOS 15 o más nuevo: intenta abrirla, y luego *Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente*).
 
             Windows o Android pueden avisar de que no es seguro porque no está firmado con un certificado de pago ni viene de una tienda: *Más información → Ejecutar de todas formas* / *Instalar de todas formas*. El código es abierto y estos archivos los compila GitHub a partir de él.

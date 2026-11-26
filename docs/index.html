@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mix4Up · YouTube sin Shorts, sin anuncios, y tus vídeos</title>
-<meta name="description" content="Mix4Up: tus recomendaciones de YouTube sin un solo Short y sin anuncios, y todos tus vídeos, en Windows y Android. Gratis y de código abierto.">
+<meta name="description" content="Mix4Up: tus recomendaciones de YouTube sin un solo Short y sin anuncios, y todos tus vídeos, en Windows, Mac y Android. Gratis y de código abierto.">
 <meta name="theme-color" content="#0c0c10">
 <meta property="og:title" content="Mix4Up · YouTube sin Shorts">
-<meta property="og:description" content="Tus recomendaciones de YouTube sin Shorts y sin anuncios, y tus vídeos. Windows y Android.">
+<meta property="og:description" content="Tus recomendaciones de YouTube sin Shorts y sin anuncios, y tus vídeos. Windows, Mac y Android.">
 <meta property="og:image" content="https://luckicla.github.io/mix4up/icon-512.png">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
@@ -169,7 +169,7 @@ h2{font:800 clamp(30px,4vw,46px)/1.08 var(--head);letter-spacing:-1.2px;margin:0
 .cmp .m4{font-weight:800;color:var(--fg)}
 
 /* descargar */
-.dlg{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.dlg{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .dlc{display:flex;flex-direction:column;gap:6px;padding:26px;border-radius:22px;background:var(--bg2);border:1px solid var(--line);text-decoration:none;transition:transform .2s,border-color .2s}
 .dlc:hover{transform:translateY(-4px);border-color:var(--acc)}
 .dlc .ic{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:var(--bg3);margin-bottom:10px;color:var(--fg)}
@@ -244,6 +244,7 @@ footer nav{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:none}
   <symbol id="pause" viewBox="0 0 24 24"><rect fill="currentColor" stroke="none" x="6.3" y="5" width="4" height="14" rx="1.5"/><rect fill="currentColor" stroke="none" x="13.7" y="5" width="4" height="14" rx="1.5"/></symbol>
   <symbol id="next" viewBox="0 0 24 24"><path fill="currentColor" stroke="currentColor" stroke-width="1.4" d="M5.5 6.4v11.2a.9.9 0 0 0 1.4.74l8.1-5.6a.9.9 0 0 0 0-1.48L6.9 5.66a.9.9 0 0 0-1.4.74z"/><rect fill="currentColor" stroke="none" x="16.6" y="5.4" width="2.3" height="13.2" rx="1.15"/></symbol>
   <symbol id="prev" viewBox="0 0 24 24"><path fill="currentColor" stroke="currentColor" stroke-width="1.4" d="M18.5 6.4v11.2a.9.9 0 0 1-1.4.74l-8.1-5.6a.9.9 0 0 1 0-1.48l8.1-5.6a.9.9 0 0 1 1.4.74z"/><rect fill="currentColor" stroke="none" x="5.1" y="5.4" width="2.3" height="13.2" rx="1.15"/></symbol>
+  <symbol id="apple" viewBox="0 0 24 24"><path d="M15.6 3.5c.1 1.3-.4 2.5-1.2 3.4-.8.9-2 1.5-3.1 1.4-.1-1.2.4-2.5 1.2-3.3.8-.9 2.1-1.5 3.1-1.5z"/><path d="M19.4 16.4c-.5 1.2-.8 1.7-1.4 2.7-.9 1.4-2.2 3.1-3.8 3.1-1.4 0-1.8-.9-3.7-.9s-2.3.9-3.7.9c-1.6 0-2.8-1.6-3.7-3-2.5-3.9-2.8-8.5-1.2-10.9 1.1-1.7 2.9-2.7 4.6-2.7s2.8.9 4.2.9c1.4 0 2.2-.9 4.2-.9 1.5 0 3.1.8 4.2 2.2-3.7 2-3.1 7.3.3 8.6z"/></symbol>
   <symbol id="monitor" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></symbol>
   <symbol id="phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.8"/><path d="M10.5 18.5h3"/></symbol>
   <symbol id="usb" viewBox="0 0 24 24"><rect x="8" y="9" width="8" height="12.5" rx="2"/><path d="M9.5 9V3.5h5V9M11 5.5v1.5M13 5.5v1.5"/></symbol>
@@ -269,6 +270,7 @@ footer nav{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:none}
       <div class="dl">
         <a class="btn acc" href="https://github.com/luckicla/mix4up/releases/download/mix4up-pc-latest/Mix4Up-Instalador.exe"><svg class="i"><use href="#monitor"/></svg><span>Descargar para Windows<small>Instalador · se actualiza sola</small></span></a>
         <a class="btn" href="https://github.com/luckicla/mix4up/releases/download/mix4up-android-latest/Mix4Up.apk"><svg class="i"><use href="#phone"/></svg><span>Android<small>APK · se actualiza sola</small></span></a>
+        <a class="btn" href="https://github.com/luckicla/mix4up/releases/download/mix4up-mac-latest/Mix4Up-Mac.dmg"><svg class="i"><use href="#apple"/></svg><span>Mac<small>Intel y Apple Silicon</small></span></a>
       </div>
       <div class="meta"><span>Versión <b id="ver">—</b></span><span><svg class="i"><use href="#check"/></svg>Gratis</span><span><svg class="i"><use href="#check"/></svg>Código abierto</span><span><svg class="i"><use href="#check"/></svg>Sin cuentas ni servidores</span></div>
     </div>
@@ -366,13 +368,14 @@ footer nav{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:none}
     <span class="kicker rv">Descargar</span>
     <h2 class="rv">Empieza en un minuto.</h2>
     <p class="sub rv">Elige tu aparato. Se actualiza solo: lo instalas una vez y ya está.</p>
-    <div class="dlg">
+    <div class="dlg" id="mac">
       <a class="dlc main rv" href="https://github.com/luckicla/mix4up/releases/download/mix4up-pc-latest/Mix4Up-Instalador.exe"><span class="ic"><svg class="i"><use href="#monitor"/></svg></span><b>Windows</b><small>Instalador para Windows 10 y 11.</small><span class="go">Descargar <svg class="i"><use href="#arrow"/></svg></span></a>
       <a class="dlc rv" href="https://github.com/luckicla/mix4up/releases/download/mix4up-android-latest/Mix4Up.apk"><span class="ic"><svg class="i"><use href="#phone"/></svg></span><b>Android</b><small>APK para Android 7 o más nuevo.</small><span class="go">Descargar <svg class="i"><use href="#arrow"/></svg></span></a>
       <a class="dlc rv" href="https://github.com/luckicla/mix4up/releases/download/mix4up-pc-latest/Mix4Up-Portable.exe"><span class="ic"><svg class="i"><use href="#usb"/></svg></span><b>Portable</b><small>Para Windows, sin instalar (sirve en un USB).</small><span class="go">Descargar <svg class="i"><use href="#arrow"/></svg></span></a>
+      <a class="dlc rv" href="https://github.com/luckicla/mix4up/releases/download/mix4up-mac-latest/Mix4Up-Mac.dmg"><span class="ic"><svg class="i"><use href="#apple"/></svg></span><b>Mac</b><small>Para Mac con Intel o con chip de Apple. La primera vez: clic derecho → Abrir.</small><span class="go">Descargar <svg class="i"><use href="#arrow"/></svg></span></a>
     </div>
     <div class="steps">
-      <div class="step rv"><i>1</i><b>Instálalo</b><p>En el PC, el instalador; en el móvil, el APK.</p></div>
+      <div class="step rv"><i>1</i><b>Instálalo</b><p>En Windows, el instalador; en el Mac, arrastra Mix4Up a Aplicaciones; en el móvil, el APK.</p></div>
       <div class="step rv"><i>2</i><b>Conecta tu cuenta</b><p>«Conectar con YouTube» e inicias sesión en Google. La sesión se queda en tu aparato.</p></div>
       <div class="step rv"><i>3</i><b>Listo</b><p>Tu inicio, sin Shorts. Si quieres, une el móvil y el PC con un QR en Ajustes.</p></div>
     </div>
@@ -384,10 +387,10 @@ footer nav{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:none}
     <span class="kicker rv">Preguntas</span>
     <h2 class="rv">Lo que suele preguntarse.</h2>
     <div class="faq">
-      <details class="rv"><summary>¿Es seguro? Windows o Android me avisan</summary><p>Sí. El aviso sale porque Mix4Up no está firmado con un certificado de pago ni viene de una tienda, no por lo que hace. En Windows: <i>Más información → Ejecutar de todas formas</i>. En Android: <i>Más detalles → Instalar de todas formas</i>. Todo el código es abierto y GitHub compila los archivos a partir de él, después de pasar pruebas automáticas en Windows y en Android.</p></details>
+      <details class="rv"><summary>¿Es seguro? Windows, Mac o Android me avisan</summary><p>Sí. El aviso sale porque Mix4Up no está firmado con un certificado de pago ni viene de una tienda, no por lo que hace. En Windows: <i>Más información → Ejecutar de todas formas</i>. En el Mac, la primera vez: clic derecho en Mix4Up (en Aplicaciones) → <i>Abrir</i> → <i>Abrir</i>; en macOS 15 o más nuevo, intenta abrirla una vez y luego <i>Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente</i>. En Android: <i>Más detalles → Instalar de todas formas</i>. Todo el código es abierto y GitHub compila los archivos a partir de él, después de pasar pruebas automáticas en Windows, en Mac y en Android.</p></details>
       <details class="rv"><summary>¿Necesito una cuenta de YouTube?</summary><p>No. Sin cuenta ves vídeos parecidos a lo que sueles ver y puedes buscar lo que quieras. Con tu cuenta, el inicio, las suscripciones, el historial y las listas son los tuyos, y sale tu foto de perfil.</p></details>
       <details class="rv"><summary>¿Adónde va mi sesión de Google?</summary><p>A ningún sitio: se guarda solo en tu aparato. Mix4Up no tiene servidores propios. Si unes el móvil y el PC, se pasan los datos por tu WiFi, sin internet de por medio.</p></details>
-      <details class="rv"><summary>¿Cómo se actualiza?</summary><p>Solo. Al abrirla mira si hay una versión nueva y se pone al día sin que hagas nada.</p></details>
+      <details class="rv"><summary>¿Cómo se actualiza?</summary><p>Solo. Al abrirla mira si hay una versión nueva y se pone al día sin que hagas nada. En el Mac te avisa y abre esta página para bajar la nueva (sin firma de Apple no puede cambiarse sola).</p></details>
       <details class="rv"><summary>¿Cuánto cuesta?</summary><p>Nada. Es gratis, sin anuncios y de código abierto.</p></details>
     </div>
   </div>

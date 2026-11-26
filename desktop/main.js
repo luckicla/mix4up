@@ -11,16 +11,21 @@
 //  - «Conectar con YouTube»: abre el inicio de sesión de Google en una ventana
 //    de Mix4Up; las cookies de la sesión se guardan solo en este PC.
 //  - Nunca se manda al navegador a descargar nada.
+//  - Mac: el mismo motor (mix4up-core para macOS) y la misma página, con los
+//    botones de ventana del Mac. Sin firma de Apple no se puede instalar sola:
+//    avisa de la versión nueva (de «mix4up-mac-latest») y abre la web para bajarla.
 const { app, BrowserWindow, Menu, shell, ipcMain, dialog, net, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 
+const MAC = process.platform === 'darwin';
 const PORT = 47823;
 const URL = `http://127.0.0.1:${PORT}/`;
 // (las pruebas automáticas ponen aquí un servidor propio)
-const UPDATES = process.env.MIX4UP_UPDATES || 'https://github.com/luckicla/mix4up/releases/download/mix4up-pc-latest/';
+const UPDATES = process.env.MIX4UP_UPDATES || 'https://github.com/luckicla/mix4up/releases/download/' + (MAC ? 'mix4up-mac-latest/' : 'mix4up-pc-latest/');
+const DOWNLOADS = 'https://luckicla.github.io/mix4up/#mac';
 const portableDir = process.env.PORTABLE_EXECUTABLE_DIR || '';
 const portable = !!portableDir;
 const TOKEN = crypto.randomBytes(16).toString('hex');
@@ -30,7 +35,7 @@ const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 
 // lo de la ventana (su almacenamiento, la caché), dentro de la carpeta de datos de Mix4Up
 try { app.setPath('userData', portable ? path.join(portableDir, '.mix4up', 'escritorio') : path.join(app.getPath('appData'), 'Mix4Up', 'escritorio')); } catch {}
-app.setAppUserModelId('com.luckicla.mix4up.desktop');
+if (process.platform === 'win32') app.setAppUserModelId('com.luckicla.mix4up.desktop');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-features', 'Translate');
 
@@ -44,9 +49,10 @@ function log(m) {
 }
 
 function corePath() {
-  const packed = path.join(process.resourcesPath || '', 'core', 'mix4up-core.exe');
+  const name = process.platform === 'win32' ? 'mix4up-core.exe' : 'mix4up-core';
+  const packed = path.join(process.resourcesPath || '', 'core', name);
   if (fs.existsSync(packed)) return packed;
-  const dev = path.join(__dirname, 'bin', process.platform === 'win32' ? 'mix4up-core.exe' : 'mix4up-core');
+  const dev = path.join(__dirname, 'bin', name);
   return fs.existsSync(dev) ? dev : '';
 }
 
@@ -105,11 +111,12 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1360, height: 860, minWidth: 380, minHeight: 560,
     backgroundColor: '#0f0f13', title: 'Mix4Up', icon: iconPath(), autoHideMenuBar: true, show: false,
-    // sin la barra de Windows: la pone la página (flechas, lo que suena, minimizar/maximizar/cerrar)
-    frame: false,
+    // sin la barra de Windows: la pone la página (flechas, lo que suena, minimizar/maximizar/cerrar).
+    // En el Mac se quedan los tres botones de colores del sistema, encima de la barra de la página
+    ...(MAC ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 20 } } : { frame: false }),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false, spellcheck: false },
   });
-  Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(MAC ? macMenu() : null);
   win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, 'splash.html'));
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -124,6 +131,29 @@ function createWindow() {
   win.on('maximize', maxState); win.on('unmaximize', maxState);
   win.on('enter-full-screen', maxState); win.on('leave-full-screen', maxState);
   win.on('enter-html-full-screen', maxState); win.on('leave-html-full-screen', maxState);
+}
+
+// el menú de arriba del Mac (sin él no van Cmd+C, Cmd+V ni Cmd+Q)
+function macMenu() {
+  return Menu.buildFromTemplate([
+    { label: 'Mix4Up', submenu: [
+      { role: 'about', label: 'Acerca de Mix4Up' }, { type: 'separator' },
+      { role: 'hide', label: 'Ocultar Mix4Up' }, { role: 'hideOthers', label: 'Ocultar otras' }, { role: 'unhide', label: 'Mostrar todas' },
+      { type: 'separator' }, { role: 'quit', label: 'Salir de Mix4Up' },
+    ] },
+    { label: 'Edición', submenu: [
+      { role: 'undo', label: 'Deshacer' }, { role: 'redo', label: 'Rehacer' }, { type: 'separator' },
+      { role: 'cut', label: 'Cortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Pegar' }, { role: 'selectAll', label: 'Seleccionar todo' },
+    ] },
+    { label: 'Ver', submenu: [
+      { label: 'Atrás', accelerator: 'Cmd+[', click: () => win && win.webContents.executeJavaScript('history.back()').catch(() => {}) },
+      { label: 'Adelante', accelerator: 'Cmd+]', click: () => win && win.webContents.executeJavaScript('history.forward()').catch(() => {}) },
+      { type: 'separator' }, { role: 'togglefullscreen', label: 'Pantalla completa' },
+    ] },
+    { label: 'Ventana', submenu: [
+      { role: 'minimize', label: 'Minimizar' }, { role: 'zoom', label: 'Zoom' }, { type: 'separator' }, { role: 'close', label: 'Cerrar' },
+    ] },
+  ]);
 }
 
 app.on('second-instance', () => {
@@ -157,7 +187,7 @@ ipcMain.handle('shell', async (_e, what, arg) => {
       else if (arg === 'max') win.isMaximized() ? win.unmaximize() : win.maximize();
       else if (arg === 'close') win.close();
       return { max: win.isMaximized(), full: win.isFullScreen() };
-    case 'info': return { version: app.getVersion(), portable, dir: portableDir };
+    case 'info': return { version: app.getVersion(), portable, dir: portableDir, platform: process.platform };
     case 'check': checkUpdates(true); return updState;
     case 'install': return installUpdate();
     case 'state': return updState;
@@ -297,6 +327,16 @@ async function checkPortable(manual) {
   log('portable: ' + ver + ' lista en ' + dest);
   tell({ state: 'ready', version: ver });
 }
+/* El Mac: sin firma de Apple, macOS no deja que la app se cambie sola por la
+   nueva. Solo se mira mac.txt («versión sha256») y, si hay una nueva, se
+   avisa; «Descargar» abre la web de Mix4Up. */
+async function checkMac() {
+  tell({ state: 'checking' });
+  const ver = (await getText(UPDATES + 'mac.txt')).trim().split(/\s+/)[0];
+  if (!ver) throw new Error('mac.txt vacío');
+  if (!newer(ver, app.getVersion())) { tell({ state: 'none', version: app.getVersion() }); return; }
+  tell({ state: 'available', version: ver, mac: true });
+}
 function psQuote(s) { return "'" + String(s).replace(/'/g, "''") + "'"; }
 function runPS(script) {
   const enc = Buffer.from(script, 'utf16le').toString('base64');
@@ -390,6 +430,7 @@ L 'hecho'`;
 }
 let installing = false;
 function installUpdate() {
+  if (MAC) { shell.openExternal(DOWNLOADS); return true; }
   if (installing) return true;
   if (!updState || updState.state !== 'ready') { wantInstall = true; checkUpdates(true); return false; }
   installing = true;
@@ -417,6 +458,7 @@ async function checkUpdates(manual) {
   checking = true;
   try {
     if (portable) { await checkPortable(manual); return; }
+    if (MAC) { await checkMac(); return; }
     if (!au) {
       au = require('electron-updater').autoUpdater;
       au.logger = { info: m => log('updater: ' + m), warn: m => log('updater: ' + m), error: m => log('updater: ' + m), debug: () => {} };

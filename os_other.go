@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package main
 
@@ -9,17 +9,21 @@ import (
 	"path/filepath"
 )
 
-// Fuera de Windows (solo para desarrollar y probar) yt-dlp, deno y ffmpeg vienen del PATH.
+// En Linux (solo para desarrollar y probar) yt-dlp, deno y ffmpeg vienen del PATH.
 const (
 	ytdlpExe        = "yt-dlp"
 	ytdlpZip        = ""
+	ytdlpAsset      = "yt-dlp"
 	denoExe         = "deno"
 	denoZip         = ""
 	ytDownloadTools = false
 	ffmpegExe       = "ffmpeg"
 	ffprobeExe      = "ffprobe"
-	ffmpegZip       = ""
 )
+
+var ffmpegURLs []string
+
+var extraBinDirs []string
 
 func hideConsole(*exec.Cmd) {}
 
@@ -37,4 +41,4 @@ func toolsDir() string { return filepath.Join(os.TempDir(), "mix4up-herramientas
 
 func revealFile(p string) { exec.Command("xdg-open", filepath.Dir(p)).Start() }
 
-func shutdownPC(cancel bool) error { return errors.New("solo en Windows") }
+func shutdownPC(cancel bool) error { return errors.New("solo en Windows y Mac") }
