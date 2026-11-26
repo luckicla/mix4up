@@ -412,7 +412,7 @@ func (y *ytResolver) get(id string, fresh bool) (*ytInfo, error) {
 	// falló fuera justo lo del camino rápido: yt-dlp a veces solo da 360p y eso no puede quedarse para siempre
 	if !(fresh && prev != nil && prev.client == -1) && !fastOff() && os.Getenv("MIX4UP_YTDLP") == "" {
 		t0 := time.Now()
-		if in, err := fastInfo(id, ytVisitor()); err == nil {
+		if in, err := fastInfo(id); err == nil {
 			in.client = -1
 			c.info = in
 			fastResult(true, nil)
