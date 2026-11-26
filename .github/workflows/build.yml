@@ -219,6 +219,8 @@ jobs:
           ls -la dist
           APP=dist/mac-universal/Mix4Up.app
           test -f dist/Mix4Up-Mac.dmg && test -f dist/Mix4Up-Mac.zip
+          hdiutil verify dist/Mix4Up-Mac.dmg
+          unzip -l dist/Mix4Up-Mac.zip | grep -q 'Mix4Up.app/Contents/Resources/core/mix4up-core'
           test -x "$APP/Contents/Resources/core/mix4up-core"
           lipo -info "$APP/Contents/MacOS/Mix4Up" "$APP/Contents/Resources/core/mix4up-core"
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$V"
