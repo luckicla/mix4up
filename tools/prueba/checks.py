@@ -115,7 +115,7 @@ def yt_play(ev, videos, secs=150):
                 time.sleep(4)
                 t2 = player(ev).get('t', 0)
                 res('Cambiar de calidad', 'OK' if t2 > t1 else 'FALLO', f'{q}p · {t1:.1f}s → {t2:.1f}s')
-                ev("M4.Settings.set({quality: 'auto'})")
+                ev("M4.Settings.set({quality: 'max'})")
             rel = until(lambda: ev("document.querySelectorAll('.related .card').length") or None, 40, 2)
             shorts = ev("JSON.stringify([...document.querySelectorAll('.related .card h3')].map(h => h.textContent).filter(t => /#shorts?/i.test(t)))")
             res('Relacionados del vídeo', 'OK' if rel else 'AVISO', f'{rel or 0} vídeos')

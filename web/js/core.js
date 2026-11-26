@@ -35,14 +35,23 @@ const M4 = (() => {
   /* ---------- ajustes (en la carpeta de datos, no en la página) ---------- */
   const DEFAULTS = {
     theme: 'dark', accent: '#ff2e88', accent2: '#c8ff00', radius: 12, density: 'normal', font: 'system', cardStyle: 'round',
-    autoplay: true, quality: 'auto', qualityCap: ANDROID ? 720 : 1080, speed: 1, subs: false, subLang: 'es', subSize: 100,
+    autoplay: true, quality: 'max', qualMax: 1, qualityCap: ANDROID ? 720 : 1080, speed: 1, subs: false, subLang: 'es', subSize: 100,
     strictShorts: true, volume: 1, muted: false, autoUpdate: true, theater: false, resume: true, markWatched: true,
     syncLook: false, gestures: true, haptics: true, navStyle: 'float', navAlpha: 72, homeSource: 'auto', sleepAction: 'pause', bgPlay: true, autoPip: true, fillScreen: false, lookVer: 0,
   };
   let settings = { ...DEFAULTS }, saveT = 0;
   const Settings = {
     async load() {
-      try { const s = await api('/api/settings'); settings = { ...DEFAULTS, ...(s || {}) }; } catch {}
+      try {
+        const s = await api('/api/settings');
+        settings = { ...DEFAULTS, ...(s || {}) };
+        // antes la calidad por defecto era «Automática» (según la pantalla y con tope): ahora es la máxima
+        if (s && !s.qualMax) {
+          if (!s.quality || s.quality === 'auto') settings.quality = 'max';
+          settings.qualMax = 1;
+          api('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }).catch(() => {});
+        }
+      } catch {}
       applyLook();
     },
     get: () => settings,

@@ -224,15 +224,16 @@ const Player = (() => {
   function pickQuality(q) {
     const hs = heights();
     let target;
-    if (q === 'auto' || !q) {
+    if (q === 'max') target = hs[0]; // la mejor que haya (4K, 8K…)
+    else if (q === 'auto' || !q) {
       const want2 = Math.max(360, Math.round((el.clientHeight || 400) * (devicePixelRatio || 1)));
       const cap = +Settings.get().qualityCap || 1080;
       target = hs.filter(x => x <= cap).sort((a, b) => a - b).find(x => x >= Math.min(want2, cap)) || hs.filter(x => x <= cap)[0] || hs[hs.length - 1];
     } else target = hs.filter(x => x <= +q)[0] || hs[hs.length - 1];
     const a = bestAudio();
-    const vs = info.formats.filter(f => f.kind === 'v' && f.h === target && codecOK(f)).sort((x, y) => codecRank(x, target) - codecRank(y, target) || (y.fps || 0) - (x.fps || 0) || (y.tbr || 0) - (x.tbr || 0));
+    const vs = info.formats.filter(f => f.kind === 'v' && f.h === target && codecOK(f)).sort((x, y) => (x.hdr ? 1 : 0) - (y.hdr ? 1 : 0) || codecRank(x, target) - codecRank(y, target) || (y.fps || 0) - (x.fps || 0) || (y.tbr || 0) - (x.tbr || 0));
     const muxed = info.formats.filter(f => f.kind === 'av' && codecOK(f)).sort((x, y) => (y.h || 0) - (x.h || 0));
-    if (vs.length && a) return { v: vs[0], a, h: target, auto: q === 'auto' || !q };
+    if (vs.length && a) return { v: vs[0], a, h: target, auto: q === 'auto' || !q, max: q === 'max' };
     if (muxed.length) return { v: muxed[0], a: null, h: muxed[0].h, auto: false };
     throw new Error('YouTube no dio ninguna calidad que se pueda ver aquí.');
   }
@@ -689,7 +690,7 @@ const Player = (() => {
       ic ? icon(ic) : h('i.dot'), h('span.l', null, label), v != null && v !== '' ? h('span.v', null, v) : '',
       o.on != null ? h('span.sw' + (o.on ? '.on' : ''), null, h('i')) : o.sub ? h('span.chev2', null, '›') : o.sel ? icon('check', 'ok') : '');
     if (which === 'main') {
-      const qLabel = item && item.src === 'yt' && qual ? (qual.auto ? 'Auto · ' + qual.h + 'p' : qual.h + 'p') : (compat ? 'Convertido' : 'Original');
+      const qLabel = item && item.src === 'yt' && qual ? (qual.max ? 'Máxima · ' + qual.h + 'p' : qual.auto ? 'Auto · ' + qual.h + 'p' : qual.h + 'p') : (compat ? 'Convertido' : 'Original');
       add(
         item && item.src === 'yt' ? row('hd', 'Calidad', qLabel, () => openMenu('quality'), { sub: 1 }) : '',
         row('speed', 'Velocidad', rate === 1 ? 'Normal' : rate + '×', () => openMenu('speed'), { sub: 1 }),
@@ -708,11 +709,12 @@ const Player = (() => {
     } else if (which === 'quality') {
       add(back('Calidad'));
       const hs = heights();
+      add(row(null, 'La máxima', hs.length ? 'Ahora ' + hs[0] + 'p' : '', () => { setQuality('max'); closeMenu(); }, { sel: qual && qual.max }));
       add(row(null, 'Automática', qual && qual.auto ? 'Ahora ' + qual.h + 'p' : 'Según la pantalla', () => { setQuality('auto'); closeMenu(); }, { sel: qual && qual.auto }));
       for (const x of hs) {
         const f = info.formats.find(f => f.h === x && (f.fps || 0) > 50);
         const tag = x >= 2160 ? '4K' : x >= 1440 ? 'QHD' : x >= 1080 ? 'Full HD' : x >= 720 ? 'HD' : '';
-        add(row(null, x + 'p' + (f ? '60' : ''), tag, () => { setQuality(String(x)); closeMenu(); }, { sel: qual && !qual.auto && qual.h === x }));
+        add(row(null, x + 'p' + (f ? '60' : ''), tag, () => { setQuality(String(x)); closeMenu(); }, { sel: qual && !qual.auto && !qual.max && qual.h === x }));
       }
     } else if (which === 'speed') {
       add(back('Velocidad'));

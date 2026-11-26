@@ -266,37 +266,70 @@ final class YtVideo {
         return in;
     }
 
-    /* ---------- el camino rápido: la app de realidad virtual de YouTube da las
-       direcciones sin acertijos de JavaScript (si no las da, yt-dlp) ---------- */
-    private static final String VR_VER = "1.65.10";
-    private static final String VR_UA = "com.google.android.apps.youtube.vr.oculus/" + VR_VER + " (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
+    /* ---------- el camino rápido: la app de YouTube para las Apple Vision Pro (como MixUp)
+       da las direcciones de todas las calidades tal cual, sin acertijos de JavaScript ni
+       anuncios, y sin cuenta (si no las da, yt-dlp). Antes era la de las Oculus (ANDROID_VR),
+       pero YouTube la rechaza desde agosto de 2026. ---------- */
+    private static final String VIS_NAME = "VISIONOS", VIS_VER = "1.02", VIS_NUM = "101";
+    private static final String VIS_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15";
     private static volatile long fastOffTil = 0;
     private static volatile int fastFails = 0;
+    private static volatile String visVisitor = "";
+    private static volatile long visVisitorAt = 0;
     private static final Pattern CODECS = Pattern.compile("codecs=\"([^\"]+)\"");
 
-    private static Info fast(String id) throws Exception {
-        JSONObject client = new JSONObject().put("clientName", "ANDROID_VR").put("clientVersion", VR_VER).put("deviceMake", "Oculus").put("deviceModel", "Quest 3")
-                .put("androidSdkVersion", 32).put("userAgent", VR_UA).put("osName", "Android").put("osVersion", "12L").put("hl", "es").put("gl", "ES");
-        String visitor = YtAccount.visitorNow();
+    private static JSONObject visCall(String endpoint, JSONObject extra, String visitor) throws Exception {
+        JSONObject client = new JSONObject().put("clientName", VIS_NAME).put("clientVersion", VIS_VER).put("deviceMake", "Apple").put("deviceModel", "RealityDevice17,1")
+                .put("osName", "visionOS").put("osVersion", "26.5.23O471").put("userAgent", VIS_UA).put("hl", "es").put("gl", "ES").put("timeZone", "UTC").put("utcOffsetMinutes", 0);
         if (!visitor.isEmpty()) client.put("visitorData", visitor);
-        JSONObject body = new JSONObject().put("context", new JSONObject().put("client", client)).put("videoId", id).put("contentCheckOk", true).put("racyCheckOk", true);
-        HttpURLConnection h = (HttpURLConnection) new URL("https://www.youtube.com/youtubei/v1/player?prettyPrint=false").openConnection();
-        h.setConnectTimeout(8000); h.setReadTimeout(10000); h.setRequestMethod("POST"); h.setDoOutput(true);
-        h.setRequestProperty("Content-Type", "application/json"); h.setRequestProperty("User-Agent", VR_UA);
-        h.setRequestProperty("X-Youtube-Client-Name", "28"); h.setRequestProperty("X-Youtube-Client-Version", VR_VER); h.setRequestProperty("Origin", "https://www.youtube.com");
+        JSONObject body = extra == null ? new JSONObject() : extra;
+        body.put("context", new JSONObject().put("client", client));
+        HttpURLConnection h = (HttpURLConnection) new URL("https://www.youtube.com/youtubei/v1/" + endpoint + "?prettyPrint=false").openConnection();
+        h.setConnectTimeout(6000); h.setReadTimeout(8000); h.setRequestMethod("POST"); h.setDoOutput(true);
+        h.setRequestProperty("Content-Type", "application/json"); h.setRequestProperty("User-Agent", VIS_UA);
+        h.setRequestProperty("X-YouTube-Client-Name", VIS_NUM); h.setRequestProperty("X-YouTube-Client-Version", VIS_VER); h.setRequestProperty("Origin", "https://www.youtube.com");
         if (!visitor.isEmpty()) h.setRequestProperty("X-Goog-Visitor-Id", visitor);
         try (OutputStream o = h.getOutputStream()) { o.write(body.toString().getBytes(StandardCharsets.UTF_8)); }
-        JSONObject j = new JSONObject(new String(Http.readAll(h.getInputStream()), StandardCharsets.UTF_8));
+        if (h.getResponseCode() != 200) throw new IOException("YouTube contestó " + h.getResponseCode());
+        return new JSONObject(new String(Http.readAll(h.getInputStream()), StandardCharsets.UTF_8));
+    }
+    // el «visitante» que YouTube da a la app (solo en memoria, 6 horas), o uno nuevo; "" si no da
+    private static String visitorId() {
+        if (!visVisitor.isEmpty() && System.currentTimeMillis() - visVisitorAt < 6 * 3600_000L) return visVisitor;
+        try { keepVisitor(visCall("visitor_id", null, "").optJSONObject("responseContext").optString("visitorData")); } catch (Exception ignored) {}
+        return visVisitor;
+    }
+    private static void keepVisitor(String v) { if (v != null && !v.isEmpty() && !v.equals(visVisitor)) { visVisitor = v; visVisitorAt = System.currentTimeMillis(); } }
+    private static boolean botCheck(JSONObject ps) { return ps != null && "LOGIN_REQUIRED".equals(ps.optString("status")) && ps.optString("reason").toLowerCase().contains("not a bot"); }
+    private static String visitorOf(JSONObject j) { JSONObject rc = j.optJSONObject("responseContext"); return rc == null ? "" : rc.optString("visitorData"); }
+
+    private static Info fast(String id) throws Exception {
+        String visitor = visitorId();
+        JSONObject req = new JSONObject().put("videoId", id).put("contentCheckOk", true).put("racyCheckOk", true)
+                .put("playbackContext", new JSONObject().put("contentPlaybackContext", new JSONObject().put("html5Preference", "HTML5_PREF_WANTS")));
+        JSONObject j = visCall("player", new JSONObject(req.toString()), visitor);
         JSONObject ps = j.optJSONObject("playabilityStatus");
+        if (botCheck(ps)) {
+            // sin un visitante de confianza pregunta si es un robot; su respuesta trae uno nuevo, que pasa
+            String fresh = visitorOf(j);
+            visVisitor = "";
+            if (fresh.isEmpty() || fresh.equals(visitor)) fresh = visitorId();
+            visitor = fresh;
+            j = visCall("player", new JSONObject(req.toString()), fresh);
+            ps = j.optJSONObject("playabilityStatus");
+        }
+        if (!botCheck(ps)) { String v = visitorOf(j); keepVisitor(v.isEmpty() ? visitor : v); }
         if (ps == null || !"OK".equals(ps.optString("status"))) throw new IOException(ps == null ? "sin respuesta" : ps.optString("status") + " " + ps.optString("reason"));
         JSONObject sd = j.getJSONObject("streamingData"), d = j.optJSONObject("videoDetails");
         if (d == null) d = new JSONObject();
+        if (d.optBoolean("isLive")) throw new IOException("ERROR directo");
         Info in = new Info();
         in.client = -1;
         in.exp = System.currentTimeMillis() + Math.max(600, sd.optLong("expiresInSeconds", 18000)) * 1000;
+        double length = d.optDouble("lengthSeconds", 0);
         JSONObject p = new JSONObject();
         p.put("id", id).put("title", d.optString("title")).put("channel", d.optString("author")).put("channelId", d.optString("channelId"))
-                .put("duration", d.optDouble("lengthSeconds", 0)).put("description", d.optString("shortDescription")).put("upload", "")
+                .put("duration", length).put("description", d.optString("shortDescription")).put("upload", "")
                 .put("views", d.optLong("viewCount", 0)).put("likes", 0).put("live", false).put("width", 0).put("height", 0).put("chapters", new JSONArray());
         JSONArray th = d.optJSONObject("thumbnail") == null ? null : d.getJSONObject("thumbnail").optJSONArray("thumbnails");
         p.put("thumb", th != null && th.length() > 0 ? th.getJSONObject(th.length() - 1).optString("url") : "");
@@ -308,22 +341,35 @@ final class YtVideo {
             for (int i = 0; i < fs.length(); i++) {
                 JSONObject f = fs.getJSONObject(i);
                 String url = f.optString("url");
-                if (url.isEmpty()) continue;
+                // tal cual (sin firma ni acertijo), sin cifrar, no el «volumen estable», no cortado
+                if (url.isEmpty() || android.net.Uri.parse(url).getQueryParameter("n") != null) continue;
+                if (f.optBoolean("isDrc") || f.has("drmFamilies") || "FORMAT_STREAM_TYPE_OTF".equals(f.optString("type")) || f.has("targetDurationSec")) continue;
+                double fd = f.optDouble("approxDurationMs", 0) / 1000;
+                if (length > 0 && fd > 0 && fd < length / 2) continue;
                 String mt = f.optString("mimeType"), mime = mt.contains(";") ? mt.substring(0, mt.indexOf(';')) : mt;
                 java.util.regex.Matcher m = CODECS.matcher(mt);
                 String[] codecs = (m.find() ? m.group(1) : "").split(",");
                 Format x = new Format();
+                long br = f.optLong("averageBitrate", 0); if (br == 0) br = f.optLong("bitrate", 0);
                 x.id = String.valueOf(f.optInt("itag")); x.url = url; x.h = f.optInt("height"); x.w = f.optInt("width"); x.fps = f.optInt("fps");
-                x.tbr = f.optLong("bitrate") / 1000.0; x.size = f.optLong("contentLength", 0); x.headers.put("User-Agent", VR_UA);
+                x.tbr = br / 1000.0; x.size = f.optLong("contentLength", 0); x.headers.put("User-Agent", VIS_UA);
                 if (mime.startsWith("audio/")) {
+                    if (f.optInt("audioChannels", 2) > 2) continue; // 5.1
                     x.kind = "a"; x.acodec = codecs[0].trim(); x.ext = mime.equals("audio/mp4") ? "m4a" : "webm"; x.mime = mime;
                     JSONObject at = f.optJSONObject("audioTrack");
-                    if (at != null) x.note = at.optString("displayName") + (at.optBoolean("audioIsDefault") ? " (original)" : "");
+                    if (at != null) {
+                        x.note = at.optString("displayName") + (at.optBoolean("audioIsDefault") ? " (original)" : "");
+                        String aid = at.optString("id"); if (aid.contains(".")) x.lang = aid.substring(0, aid.indexOf('.'));
+                    }
                     ha = true;
                 } else if (codecs.length > 1) { x.kind = "av"; x.vcodec = codecs[0].trim(); x.acodec = codecs[1].trim(); x.ext = "mp4"; x.mime = "video/mp4"; hv = true; ha = true; }
-                else { x.kind = "v"; x.vcodec = codecs[0].trim(); x.ext = mime.equals("video/mp4") ? "mp4" : "webm"; x.mime = mime; hv = true; }
+                else {
+                    x.kind = "v"; x.vcodec = codecs[0].trim(); x.ext = mime.equals("video/mp4") ? "mp4" : "webm"; x.mime = mime; hv = true;
+                    JSONObject ci = f.optJSONObject("colorInfo"); String tr = ci == null ? "" : ci.optString("transferCharacteristics");
+                    x.hdr = f.optString("qualityLabel").contains("HDR") || tr.contains("SMPTEST2084") || tr.contains("ARIB_STD_B67");
+                }
                 in.formats.add(x);
-                JSONObject o = new JSONObject().put("id", x.id).put("ext", x.ext).put("kind", x.kind).put("vcodec", x.vcodec).put("acodec", x.acodec).put("tbr", x.tbr).put("size", x.size).put("note", x.note).put("lang", "").put("hdr", false);
+                JSONObject o = new JSONObject().put("id", x.id).put("ext", x.ext).put("kind", x.kind).put("vcodec", x.vcodec).put("acodec", x.acodec).put("tbr", x.tbr).put("size", x.size).put("note", x.note).put("lang", x.lang).put("hdr", x.hdr);
                 if (x.h > 0) o.put("h", x.h).put("w", x.w);
                 if (x.fps > 0) o.put("fps", x.fps);
                 fmts.put(o);
