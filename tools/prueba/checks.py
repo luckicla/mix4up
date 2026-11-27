@@ -125,7 +125,10 @@ def yt_play(ev, videos, secs=150):
         say('no se ve', v['id'], st)
         last = st
     err = (last or {}).get('err', '') if cands else 'sin candidatos'
-    bot = 'robot' in err or 'bot' in err
+    # YouTube bloquea a veces los servidores de GitHub: pide «demostrar que no eres un robot» o dice que
+    # el contenido «no está disponible» a todos los métodos (los mismos vídeos que la búsqueda acaba de dar).
+    # Eso es el bloqueo del servidor de pruebas, no un fallo de Mix4Up: queda como aviso.
+    bot = 'robot' in err or 'bot' in err or 'no está disponible' in err
     res('Un vídeo de YouTube se ve (sin anuncios)', 'AVISO' if bot else 'FALLO', err or json.dumps(last, ensure_ascii=False))
     return None
 
