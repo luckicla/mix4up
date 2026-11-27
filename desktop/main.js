@@ -18,7 +18,8 @@ const { app, BrowserWindow, Menu, shell, ipcMain, dialog, net, session } = requi
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
+const tcp = require('net');
 
 const MAC = process.platform === 'darwin';
 const PORT = 47823;
@@ -70,6 +71,27 @@ function startCore() {
   });
 }
 
+// un motor de antes que se quedó colgado (la ventana se cerró de golpe, por ejemplo): tiene el puerto
+// cogido pero no contesta, y el nuevo no puede arrancar (la app se quedaba cargando en bucle). Se cierra.
+function portTaken() {
+  return new Promise(ok => {
+    const s = tcp.connect(PORT, '127.0.0.1');
+    const done = v => { try { s.destroy(); } catch {} ok(v); };
+    s.setTimeout(1500, () => done(true)); // acepta pero no dice nada: también está cogido
+    s.once('connect', () => done(true));
+    s.once('error', () => done(false));
+  });
+}
+async function freeStuckCore() {
+  if (await up() || !(await portTaken())) return;
+  log('hay un mix4up-core colgado con el puerto cogido: se cierra');
+  try {
+    if (process.platform === 'win32') spawnSync('taskkill', ['/F', '/T', '/IM', 'mix4up-core.exe'], { windowsHide: true, timeout: 8000 });
+    else spawnSync('pkill', ['-9', '-x', 'mix4up-core'], { timeout: 8000 });
+  } catch (e) { log('no se pudo cerrar: ' + e.message); }
+  for (let i = 0; i < 20 && await portTaken(); i++) await new Promise(r => setTimeout(r, 250));
+}
+
 let restarts = [];
 async function keepServed() {
   if (quitting || core) return;
@@ -77,6 +99,7 @@ async function keepServed() {
   restarts = restarts.filter(t => Date.now() - t < 10 * 60e3);
   if (restarts.length >= 5) { log('mix4up-core no aguanta: se deja'); return; }
   restarts.push(Date.now());
+  await freeStuckCore();
   startCore();
   if (await waitCore(15000) && win) win.webContents.reload();
 }
@@ -166,6 +189,7 @@ app.whenReady().then(async () => {
   if (!first) return;
   createWindow();
   if (portable) setTimeout(cleanPortable, 8000);
+  await freeStuckCore();
   startCore();
   const ok = await waitCore();
   if (!win) return;

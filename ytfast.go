@@ -309,18 +309,28 @@ func fastInfo(id string) (*ytInfo, error) {
 	if !hasV || !hasA {
 		return nil, errors.New("rápido: sin direcciones")
 	}
-	// ¿de verdad da el vídeo? (un trozo pequeño del sonido; si YouTube da direcciones que luego
-	// rechaza, mejor pasar a yt-dlp ahora que con el vídeo a medias). La conexión se queda abierta.
+	// ¿de verdad da el vídeo? Un trozo pequeño del sonido y otro de la imagen más grande (la que
+	// pone «La máxima»): si YouTube da direcciones que luego rechaza, mejor pasar a yt-dlp ahora que
+	// con el vídeo a medias (sonaba un momento y se quedaba en negro). Las conexiones se quedan abiertas.
+	var audio, best *ytFormat
 	for _, f := range in.Formats {
-		if f.Kind == "a" {
-			r, err := f.fetch(0, 1023)
-			if err != nil {
-				return nil, errors.New("rápido: comprobación: " + err.Error())
-			}
-			io.Copy(io.Discard, r.Body)
-			r.Body.Close()
-			break
+		if f.Kind == "a" && audio == nil {
+			audio = f
 		}
+		if f.Kind == "v" && (best == nil || f.Height > best.Height) {
+			best = f
+		}
+	}
+	for _, f := range []*ytFormat{audio, best} {
+		if f == nil {
+			continue
+		}
+		r, err := f.fetch(0, 1023)
+		if err != nil {
+			return nil, errors.New("rápido: comprobación (" + f.Kind + " " + f.ID + "): " + err.Error())
+		}
+		io.Copy(io.Discard, r.Body)
+		r.Body.Close()
 	}
 	return in, nil
 }

@@ -393,9 +393,16 @@ const Player = (() => {
     stuckStep++;
     diag(`atascado ${item.id} en ${t.toFixed(1)}s (paso ${stuckStep}, ${qual.v.id}${qual.a ? '+' + qual.a.id : ''}, listo ${video.readyState}/${audio.readyState})`);
     if (stuckStep === 1) { audio.removeAttribute('src'); applyQuality(t, false); return; }
-    if (stuckStep === 2 && qual.a) {
+    if (stuckStep >= 2 && qual.a) {
+      // primero una calidad menos (4K → 1440p → 1080p…), con otro formato de imagen si lo hay; y si ni así, la de 360p
+      const lower = heights().filter(x => x < qual.h);
+      if (lower.length && qual.h > 480) {
+        const was = qual.h;
+        try { qual = { ...pickQuality(String(lower[0])), max: qual.max }; } catch { lower.length = 0; }
+        if (lower.length) { keepAlso = []; applyQuality(t, false); toast('YouTube va lento con ' + was + 'p: lo pongo en ' + qual.h + 'p'); return; }
+      }
       const mux = info.formats.filter(f => f.kind === 'av' && codecOK(f)).sort((x, y) => (y.h || 0) - (x.h || 0))[0];
-      if (mux) { toMux(mux, t, 'YouTube va lento: lo pongo en ' + mux.h + 'p un momento'); return; }
+      if (mux && stuckStep < 8) { toMux(mux, t, 'YouTube va lento: lo pongo en ' + mux.h + 'p un momento'); return; }
     }
     showErr('YouTube no está mandando este vídeo. Prueba a reintentar.');
   }, 2000);
