@@ -86,6 +86,10 @@ const SettingsPage = (() => {
     return h('div.set', null, h('span', null, label, sub ? h('small', null, sub) : ''), s);
   };
 
+  // cada aparato ve solo sus ajustes: en el móvil no salen los del PC y al revés
+  // (en un navegador normal, sin la app, salen todos)
+  const onPhone = ANDROID || !DESKTOP, onPC = DESKTOP || !ANDROID;
+
   route(/^\/settings$/, async () => {
     const v = $('#view');
     v.className = '';
@@ -102,7 +106,7 @@ const SettingsPage = (() => {
         h('small', null, cfg.connected ? 'Tu inicio, suscripciones, historial y listas vienen de tu cuenta. La sesión se guarda solo en este aparato.' : 'Conéctala para ver tus recomendaciones (sin Shorts), suscripciones, historial y listas.')),
         cfg.connected ? h('div.btns', null, h('button.btn', { onclick: connect }, 'Volver a conectar'), h('button.btn.ghost', { onclick: disconnect }, 'Desconectar'))
           : h('button.btn.acc', { onclick: connect }, 'Conectar con YouTube')),
-      ANDROID ? '' : h('div.set', null, h('span', null, 'Con la sesión de tu navegador', h('small', null, 'Si ya tienes YouTube abierto en el navegador del PC (mejor Firefox), Mix4Up puede usar esa sesión.')),
+      !onPC ? '' : h('div.set', null, h('span', null, 'Con la sesión de tu navegador', h('small', null, 'Si ya tienes YouTube abierto en el navegador del PC (mejor Firefox), Mix4Up puede usar esa sesión.')),
         h('div.btns', null, ...[['firefox', 'Firefox'], ['chrome', 'Chrome'], ['edge', 'Edge']].map(([b, n]) => h('button.btn.ghost', { onclick: async e => {
           const btn = e.currentTarget; btn.disabled = true; toast('Leyendo la sesión de ' + n + '… (ciérralo si da error)');
           try { await api('/api/yt/frombrowser?b=' + b, { method: 'POST' }); await afterLogin(); } catch (err) { toast(err.message, { ms: 7000 }); } finally { btn.disabled = false; }
@@ -138,11 +142,11 @@ const SettingsPage = (() => {
       h('div.set', null, h('span', null, 'Color principal', h('small', null, 'Botones, la barra del vídeo, lo seleccionado.')), accBox, acc1),
       h('div.set', null, h('span', null, 'Color secundario', h('small', null, 'Detalles: el temporizador, «Suscrito», el tramo A-B.')), acc2),
       h('div.set', null, h('span', null, 'Esquinas', h('small', null, 'De rectas a muy redondeadas.')), rad),
-      sel('density', 'Tamaño de las miniaturas', 'Cuántos vídeos caben por fila.', [['compact', 'Pequeñas (caben más)'], ['normal', 'Normales'], ['big', 'Grandes']]),
+      !onPC ? '' : sel('density', 'Tamaño de las miniaturas', 'Cuántos vídeos caben por fila.', [['compact', 'Pequeñas (caben más)'], ['normal', 'Normales'], ['big', 'Grandes']]),
       sel('font', 'Letra', '', [['system', 'La del sistema'], ['rounded', 'Redondeada'], ['narrow', 'Estrecha'], ['serif', 'Con serifa'], ['mono', 'Máquina de escribir']]),
-      h('div.set', null, h('span', null, 'Menú de abajo (móvil)', h('small', null, 'Cómo quieres la barra de Inicio, Suscripciones, Mis vídeos y Tú.')), navBox),
-      h('div.set', null, h('span', null, 'Transparencia del menú', h('small', null, 'Cuánto se ve lo de detrás (en el menú flotante).')), h('input', { type: 'range', min: 25, max: 100, value: Settings.get().navAlpha, oninput: e => Settings.set({ navAlpha: +e.target.value, lookVer: Date.now() }) })),
-      sw('syncLook', 'Mismo aspecto en el móvil y el PC', 'Al sincronizar, el aspecto que cambies en uno pasa al otro.'),
+      !onPhone ? '' : h('div.set', null, h('span', null, 'Menú de abajo', h('small', null, 'Cómo quieres la barra de Inicio, Suscripciones, Mis vídeos y Tú.')), navBox),
+      !onPhone ? '' : h('div.set', null, h('span', null, 'Transparencia del menú', h('small', null, 'Cuánto se ve lo de detrás (en el menú flotante).')), h('input', { type: 'range', min: 25, max: 100, value: Settings.get().navAlpha, oninput: e => Settings.set({ navAlpha: +e.target.value, lookVer: Date.now() }) })),
+      sw('syncLook', 'Mismo aspecto en el móvil y el PC', 'Al sincronizar, el aspecto que cambies en uno pasa al otro (lo que solo es de un aparato, como el menú de abajo del móvil, se queda en el suyo).'),
       h('div.set', null, h('span', null, 'Volver al aspecto de siempre'), h('button.btn.ghost', { onclick: () => { Settings.set({ ...PRESETS[0][1], density: 'normal', lookVer: Date.now() }); M4.render(); } }, 'Restablecer'))));
 
     // reproducción
