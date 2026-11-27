@@ -23,10 +23,11 @@ import (
 
 // Los vídeos de YouTube se ven con el reproductor de Mix4Up (sin anuncios):
 // yt-dlp dice dónde están la imagen y el sonido de cada calidad y Mix4Up se
-// los pasa a la página (/ytstream/<id>/<formato>). En Windows Mix4Up baja
-// yt-dlp (y deno, el motor de JavaScript que yt-dlp necesita para YouTube) en
-// %LOCALAPPDATA%\Mix4Up\herramientas y lo mantiene al día: YouTube cambia a
-// menudo y las versiones viejas dejan de funcionar.
+// los pasa a la página (/ytstream/<id>/<formato>). En Windows y en el Mac
+// Mix4Up baja yt-dlp (y deno, el motor de JavaScript que yt-dlp necesita para
+// YouTube) en su carpeta de herramientas (%LOCALAPPDATA%\Mix4Up\herramientas,
+// o ~/Library/Application Support/Mix4Up/herramientas) y lo mantiene al día:
+// YouTube cambia a menudo y las versiones viejas dejan de funcionar.
 
 type ytFormat struct {
 	ID      string  `json:"id"`
@@ -121,6 +122,19 @@ var ytVideoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 func ytToolsDir() string { return filepath.Join(toolsDir(), "yt") }
 
+// findTool: un programa del PATH o de las carpetas de siempre del sistema (Homebrew en el Mac)
+func findTool(name string) string {
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	for _, d := range extraBinDirs {
+		if p := filepath.Join(d, name); fileExists(p) {
+			return p
+		}
+	}
+	return ""
+}
+
 func ytdlpPath() string {
 	if p := os.Getenv("MIX4UP_YTDLP"); p != "" {
 		return p
@@ -135,10 +149,7 @@ func ytdlpPath() string {
 	if p := filepath.Join(d, ytdlpExe); fileExists(p) {
 		return p
 	}
-	if p, err := exec.LookPath("yt-dlp"); err == nil {
-		return p
-	}
-	return ""
+	return findTool("yt-dlp")
 }
 
 func ytdlpCurrent() string {
@@ -150,10 +161,7 @@ func denoPath() string {
 	if p := filepath.Join(ytToolsDir(), denoExe); fileExists(p) {
 		return p
 	}
-	if p, err := exec.LookPath("deno"); err == nil {
-		return p
-	}
-	return ""
+	return findTool("deno")
 }
 
 // prepare: baja lo que falte y actualiza yt-dlp como mucho cada 12 horas.
@@ -220,21 +228,33 @@ func fetchYtdlp(dir, tag string) error {
 	sub := "ytdlp-" + tag
 	dst := filepath.Join(dir, sub)
 	base := "https://github.com/yt-dlp/yt-dlp/releases/download/" + tag + "/"
-	err := downloadZip(base+ytdlpZip, dst, func(name string) (string, bool) { return name, true })
 	exeDir := ""
-	if err == nil {
-		filepath.WalkDir(dst, func(p string, d os.DirEntry, _ error) error {
-			if exeDir == "" && d != nil && !d.IsDir() && strings.EqualFold(d.Name(), ytdlpExe) {
-				exeDir, _ = filepath.Rel(dir, filepath.Dir(p))
-			}
-			return nil
-		})
+	var err error
+	if ytdlpZip != "" {
+		err = downloadZip(base+ytdlpZip, dst, func(name string) (string, bool) { return name, true })
+		if err == nil {
+			filepath.WalkDir(dst, func(p string, d os.DirEntry, _ error) error {
+				if exeDir == "" && d != nil && !d.IsDir() && strings.EqualFold(d.Name(), ytdlpExe) {
+					exeDir, _ = filepath.Rel(dir, filepath.Dir(p))
+					os.Chmod(p, 0o755)
+				}
+				return nil
+			})
+		}
+	} else {
+		// un solo archivo (Mac): en su carpeta con la versión
+		os.MkdirAll(dst, 0o755)
+		if err = download(base+ytdlpAsset, filepath.Join(dst, ytdlpExe)); err == nil {
+			os.Chmod(filepath.Join(dst, ytdlpExe), 0o755)
+			exeDir = sub
+		}
 	}
 	if exeDir == "" {
 		os.RemoveAll(dst)
-		if err2 := download(base+ytdlpExe, filepath.Join(dir, ytdlpExe)); err2 != nil {
+		if err2 := download(base+ytdlpAsset, filepath.Join(dir, ytdlpExe)); err2 != nil {
 			return fmt.Errorf("%v; %v", err, err2)
 		}
+		os.Chmod(filepath.Join(dir, ytdlpExe), 0o755)
 		os.Remove(filepath.Join(dir, "current"))
 		return nil
 	}
@@ -255,12 +275,14 @@ func fetchDeno(dir string) error {
 	if denoZip == "" {
 		return nil
 	}
-	return downloadZip("https://github.com/denoland/deno/releases/latest/download/"+denoZip, dir, func(name string) (string, bool) {
+	err := downloadZip("https://github.com/denoland/deno/releases/latest/download/"+denoZip, dir, func(name string) (string, bool) {
 		if strings.EqualFold(filepath.Base(name), denoExe) {
 			return denoExe, true
 		}
 		return "", false
 	})
+	os.Chmod(filepath.Join(dir, denoExe), 0o755)
+	return err
 }
 
 func download(u, dst string) error {
@@ -344,24 +366,18 @@ func ffmpegPath() string {
 	if p := filepath.Join(toolsDir(), "ffmpeg", "bin", ffmpegExe); fileExists(p) {
 		return p
 	}
-	if p, err := exec.LookPath(ffmpegExe); err == nil {
-		return p
-	}
-	return ""
+	return findTool(ffmpegExe)
 }
 
 func ffprobePath() string {
 	if p := filepath.Join(toolsDir(), "ffmpeg", "bin", ffprobeExe); fileExists(p) {
 		return p
 	}
-	if p, err := exec.LookPath(ffprobeExe); err == nil {
-		return p
-	}
-	return ""
+	return findTool(ffprobeExe)
 }
 
 func ensureFFmpeg() {
-	if ffmpegZip == "" || ffmpegPath() != "" {
+	if len(ffmpegURLs) == 0 || ffmpegPath() != "" {
 		return
 	}
 	ffMu.Lock()
@@ -370,18 +386,32 @@ func ensureFFmpeg() {
 		return
 	}
 	logf("descargando ffmpeg")
-	dst := filepath.Join(toolsDir(), "ffmpeg")
-	err := downloadZip("https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"+ffmpegZip, dst, func(name string) (string, bool) {
-		// ffmpeg-…/bin/ffmpeg.exe → bin/ffmpeg.exe
-		i := strings.Index(name, "/bin/")
-		if i < 0 {
-			return "", false
-		}
-		return name[i+1:], true
-	})
-	if err != nil {
+	if err := fetchFFmpeg(filepath.Join(toolsDir(), "ffmpeg")); err != nil {
 		logf("ffmpeg: %v", err)
 	}
+}
+
+// fetchFFmpeg: baja ffmpeg y ffprobe en dst/bin
+func fetchFFmpeg(dst string) error {
+	for _, u := range ffmpegURLs {
+		err := downloadZip(u, dst, func(name string) (string, bool) {
+			// ffmpeg-…/bin/ffmpeg.exe → bin/ffmpeg.exe (Windows); ffmpeg → bin/ffmpeg (Mac)
+			if i := strings.Index(name, "/bin/"); i >= 0 {
+				return name[i+1:], true
+			}
+			if b := filepath.Base(name); b == ffmpegExe || b == ffprobeExe {
+				return "bin/" + b, true
+			}
+			return "", false
+		})
+		if err != nil {
+			return err
+		}
+	}
+	for _, n := range []string{ffmpegExe, ffprobeExe} {
+		os.Chmod(filepath.Join(dst, "bin", n), 0o755)
+	}
+	return nil
 }
 
 // ---- lo que yt-dlp sabe de un vídeo ----

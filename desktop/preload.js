@@ -2,6 +2,7 @@
 // Lo que la página de Mix4Up puede pedirle a la app de escritorio
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('Mix4UpShell', {
+  platform: process.platform, // 'win32' | 'darwin'
   info: () => ipcRenderer.invoke('shell', 'info'),
   check: () => ipcRenderer.invoke('shell', 'check'),
   install: () => ipcRenderer.invoke('shell', 'install'),

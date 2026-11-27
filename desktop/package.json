@@ -7,7 +7,8 @@
   "homepage": "https://luckicla.github.io/mix4up/",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis portable --publish never"
+    "dist": "electron-builder --win nsis portable --publish never",
+    "dist:mac": "electron-builder --mac dmg zip --universal --publish never"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
@@ -55,6 +56,20 @@
       "warningsAsErrors": false
     },
     "portable": { "artifactName": "Mix4Up-Portable.${ext}" },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["universal"] }, { "target": "zip", "arch": ["universal"] }],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.video",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "darkModeSupport": true,
+      "artifactName": "Mix4Up-Mac.${ext}",
+      "x64ArchFiles": "Contents/Resources/core/mix4up-core",
+      "extraResources": [{ "from": "bin", "to": "core", "filter": ["mix4up-core"] }],
+      "extendInfo": { "NSAppleEventsUsageDescription": "Mix4Up apaga el Mac cuando acaba el temporizador para dormir (solo si se lo pides)." }
+    },
+    "dmg": { "title": "Mix4Up", "artifactName": "Mix4Up-Mac.${ext}" },
     "copyright": "© 2026 luckicla",
     "afterPack": "build/afterPack.js",
     "publish": [

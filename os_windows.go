@@ -11,13 +11,17 @@ import (
 const (
 	ytdlpExe        = "yt-dlp.exe"
 	ytdlpZip        = "yt-dlp_win.zip"
+	ytdlpAsset      = "yt-dlp.exe"
 	denoExe         = "deno.exe"
 	denoZip         = "deno-x86_64-pc-windows-msvc.zip"
 	ytDownloadTools = true
 	ffmpegExe       = "ffmpeg.exe"
 	ffprobeExe      = "ffprobe.exe"
-	ffmpegZip       = "ffmpeg-master-latest-win64-gpl-shared.zip"
 )
+
+var ffmpegURLs = []string{"https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"}
+
+var extraBinDirs []string
 
 var (
 	shell32                  = syscall.NewLazyDLL("shell32.dll")

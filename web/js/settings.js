@@ -5,6 +5,8 @@
 const SettingsPage = (() => {
   const { h, icon, $, api, toast, Settings, ANDROID, DESKTOP, route } = M4;
   const S = window.Mix4UpShell, A = window.Mix4UpAndroid;
+  // el Mac sin firma de Apple no se instala solo: avisa y se baja desde la web
+  const MAC = !!S && S.platform === 'darwin';
 
   const THEMES = [
     ['dark', 'Oscuro', '#0f0f13', '#22222b'], ['light', 'Claro', '#f7f6f3', '#ecebe7'], ['oled', 'Negro puro', '#000', '#18181c'],
@@ -188,7 +190,7 @@ const SettingsPage = (() => {
 
     // actualizaciones
     const upd = h('div.set');
-    page.append(h('section', null, h('h2', null, icon('refresh'), 'Actualizaciones'), upd, sw('autoUpdate', 'Actualizar sola', 'Mix4Up se baja e instala las versiones nuevas sin preguntar.'),
+    page.append(h('section', null, h('h2', null, icon('refresh'), 'Actualizaciones'), upd, MAC ? h('div.set', null, h('span', null, 'En el Mac', h('small', null, 'Mix4Up te avisa cuando hay una versión nueva y abre la web para bajarla.'))) : sw('autoUpdate', 'Actualizar sola', 'Mix4Up se baja e instala las versiones nuevas sin preguntar.'),
       h('div.set', null, h('span', null, 'Web oficial', h('small', null, 'Mix²: Mix4Up y MixUp en una web, con las descargas y las novedades')), h('a.btn.ghost', { href: 'https://luckicla.github.io/mix2-project/', target: '_blank', rel: 'noopener' }, 'Abrir'))));
     paintUpdate(upd, info);
 
@@ -203,7 +205,12 @@ const SettingsPage = (() => {
   /* ---------- actualizaciones (las mismas en el PC y en el móvil) ---------- */
   let updState = null;
   const updListeners = new Set();
-  function onUpdState(s) { updState = s; updListeners.forEach(f => f(s)); if (s && s.state === 'ready' && !Settings.get().autoUpdate) toast('Hay una versión nueva de Mix4Up', { action: 'Actualizar', fn: install }); }
+  let toldMac = '';
+  function onUpdState(s) {
+    updState = s; updListeners.forEach(f => f(s));
+    if (s && s.state === 'ready' && !Settings.get().autoUpdate) toast('Hay una versión nueva de Mix4Up', { action: 'Actualizar', fn: install });
+    if (s && s.mac && s.state === 'available' && toldMac !== s.version) { toldMac = s.version; toast('Hay una versión nueva de Mix4Up: ' + (s.version || ''), { action: 'Descargar', fn: install, ms: 12000 }); }
+  }
   if (DESKTOP && S.onUpdate) S.onUpdate(onUpdState);
   window.M4update = json => { try { onUpdState(typeof json === 'string' ? JSON.parse(json) : json); } catch {} };
   function check() { if (DESKTOP) S.check().then(s => s && onUpdState(s)); else if (ANDROID) A.checkUpdate(true); }
@@ -216,9 +223,9 @@ const SettingsPage = (() => {
       if (!box.isConnected) { updListeners.delete(paint); return; }
       const small = label.querySelector('small');
       if (!s) { small.textContent = DESKTOP || ANDROID ? 'Toca para mirar si hay una nueva' : 'En el navegador no se actualiza sola'; return; }
-      const map = { checking: 'Mirando si hay una nueva…', none: 'Tienes la última', available: 'Hay una nueva: ' + (s.version || ''), downloading: 'Bajando la nueva… ' + (s.pct || 0) + '%', ready: 'Lista para instalar: ' + (s.version || ''), installing: 'Instalando…', error: 'No se pudo: ' + (s.msg || '') };
+      const map = { checking: 'Mirando si hay una nueva…', none: 'Tienes la última', available: 'Hay una nueva: ' + (s.version || '') + (s.mac ? ' · se baja desde la web' : ''), downloading: 'Bajando la nueva… ' + (s.pct || 0) + '%', ready: 'Lista para instalar: ' + (s.version || ''), installing: 'Instalando…', error: 'No se pudo: ' + (s.msg || '') };
       small.textContent = map[s.state] || '';
-      btn.textContent = s.state === 'ready' || s.state === 'available' ? 'Actualizar' : s.state === 'downloading' || s.state === 'installing' ? 'Un momento…' : 'Buscar actualización';
+      btn.textContent = s.mac && s.state === 'available' ? 'Descargar' : s.state === 'ready' || s.state === 'available' ? 'Actualizar' : s.state === 'downloading' || s.state === 'installing' ? 'Un momento…' : 'Buscar actualización';
       btn.disabled = s.state === 'downloading' || s.state === 'installing' || s.state === 'checking';
       if (s.state === 'available') btn.onclick = () => install();
     };

@@ -170,7 +170,7 @@ func (l *library) scanLoop() {
 }
 
 var skipDirs = map[string]bool{".mix4up": true, ".zentor": true, "$recycle.bin": true, "system volume information": true,
-	"node_modules": true, "appdata": true, "windows": true, "program files": true, "program files (x86)": true}
+	"node_modules": true, "appdata": true, "windows": true, "program files": true, "program files (x86)": true, "library": true}
 
 func (l *library) scan() {
 	var found []*video

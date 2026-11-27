@@ -499,6 +499,9 @@ html.tb #top button, html.tb #top a, html.tb #top input, html.tb #top form, html
 html.tb-max .wctl .i-rest { display: block; }
 html.tb-full #top { display: none; }
 @media (max-width: 900px) { html.tb .tbnow { display: none !important; } }
+/* Mac: hueco a la izquierda para los tres botones de colores del sistema */
+html.tb-mac #top { padding-left: 84px; padding-right: 12px; }
+html.tb-mac.tb-macfull #top { padding-left: 12px; }
 
 /* ---------- reproductor: controles del móvil (como YouTube) ---------- */
 .player .mcenter, .player .mtop, .player .thin { display: none; }
