@@ -392,7 +392,11 @@ final class YtVideo {
         in.pub = p;
         // ¿de verdad lo da? (un trozo pequeño del sonido). Hace falta: si YouTube da direcciones que luego
         // rechaza, mejor saberlo ya y pasar a yt-dlp aquí que con el vídeo a medias (se quedaba cargando sin fin)
+        // (y un trozo de la imagen más grande, la que pone «La máxima»: si la rechaza, mejor yt-dlp ya)
+        Format bestV = null;
+        for (Format f : in.formats) if (f.kind.equals("v") && (bestV == null || f.h > bestV.h)) bestV = f;
         for (Format f : in.formats) if (f.kind.equals("a")) { warm(f, true); break; }
+        if (bestV != null) warm(bestV, true);
         return in;
     }
 

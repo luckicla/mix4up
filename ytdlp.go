@@ -190,7 +190,16 @@ func (y *ytResolver) prepare() {
 		logf("yt: yt-dlp latest: %v", err)
 		if have {
 			y.checked = time.Now()
+			return
 		}
+		// sin yt-dlp y sin poder preguntar a GitHub cuál es la última (le pasa a mucha gente
+		// detrás de la misma conexión: GitHub limita esas preguntas): se baja «la última» directamente
+		logf("yt: descargando la última yt-dlp sin preguntar la versión")
+		if err := fetchYtdlpFrom(dir, "ytdlp-latest", "https://github.com/yt-dlp/yt-dlp/releases/latest/download/"); err != nil {
+			logf("yt: yt-dlp (última): %v", err)
+			return
+		}
+		logf("yt: yt-dlp listo (última)")
 		return
 	}
 	y.checked = time.Now()
@@ -225,9 +234,11 @@ func latestTag(repo string) (string, error) {
 }
 
 func fetchYtdlp(dir, tag string) error {
-	sub := "ytdlp-" + tag
+	return fetchYtdlpFrom(dir, "ytdlp-"+tag, "https://github.com/yt-dlp/yt-dlp/releases/download/"+tag+"/")
+}
+
+func fetchYtdlpFrom(dir, sub, base string) error {
 	dst := filepath.Join(dir, sub)
-	base := "https://github.com/yt-dlp/yt-dlp/releases/download/" + tag + "/"
 	exeDir := ""
 	var err error
 	if ytdlpZip != "" {
